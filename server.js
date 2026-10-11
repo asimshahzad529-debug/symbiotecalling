@@ -40,7 +40,8 @@ var memory = new memoryMod.MemoryStore(path.join(__dirname, 'data'));
 var MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
 };
 
 function sendJson(res, code, obj) {
@@ -95,6 +96,19 @@ function serveStatic(req, res) {
   var rel = url.pathname === '/' ? '/index.html' : url.pathname;
   var file = path.normalize(path.join(PUBLIC, rel));
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); res.end('forbidden'); return; }
+  // Avatar fallback: when avatars were deployed via text-only tooling they are stored
+  // as base64 sidecars (<name>.jpg.b64); decode and serve them as real JPEGs.
+  if (rel.startsWith('/avatars/') && /\.jpg$/i.test(rel) && !fs.existsSync(file)) {
+    var b64file = file + '.b64';
+    if (fs.existsSync(b64file)) {
+      try {
+        var img = Buffer.from(fs.readFileSync(b64file, 'utf8').replace(/\s+/g, ''), 'base64');
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': img.length });
+        res.end(img);
+        return;
+      } catch (e) { /* fall through to 404 */ }
+    }
+  }
   fs.readFile(file, function (err, data) {
     if (err) { res.writeHead(404); res.end('not found'); return; }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
