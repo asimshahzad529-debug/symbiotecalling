@@ -1,0 +1,18 @@
+{
+  "dependencies": {
+    "@google/genai": "^2.28.0",
+    "ws": "^8.18.0"
+  },
+  "description": "Symbiote Calling \u2014 dial 101 AI calling agents from a phone-style UI, powered by Gemini Live. Local demo.",
+  "engines": {
+    "node": ">=18"
+  },
+  "name": "symbiote-calling",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "node tests/run.js"
+  },
+  "type": "commonjs",
+  "version": "5.0.0"
+}

@@ -1,0 +1,19 @@
+# secrets
+.env
+.env.local
+
+# local demo data (never commit real records)
+data/calls.json
+
+# logs
+*.log
+
+# deps
+node_modules/
+
+# os
+.DS_Store
+Thumbs.db
+
+data/memories.json
+data/keyscope.json

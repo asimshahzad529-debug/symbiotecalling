@@ -1,0 +1,12 @@
+# render.yaml — one-click deploy recipe for Render's free tier.
+# The whole app (frontend + voice relay + API) runs as ONE web service.
+# No credit card needed. Pair with a free UptimeRobot/cron-job.org ping to
+# /api/health every ~10 minutes so the free tier never sleeps.
+services:
+  - type: web
+    name: symbiote-calling
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
