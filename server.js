@@ -309,5 +309,5 @@ runPrune();
 setInterval(runPrune, 24 * 60 * 60 * 1000);
 
 server.listen(PORT, HOST, function () {
-  console.log('[calling] Symbiote Calling v7.0 on http://' + HOST + ':' + PORT + ' — ' + agents.list().length + ' agents ready');
+  console.log('[calling] Symbiote Calling v7.5 on http://' + HOST + ':' + PORT + ' — ' + agents.list().length + ' agents ready');
 });

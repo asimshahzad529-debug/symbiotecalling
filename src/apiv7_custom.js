@@ -60,7 +60,7 @@
  *      mergeAgentLists(builtinList, customList)
  *        -> builtinList.concat(customList) mapped through the same
  *           card/dialer row renderer; custom rows get a "Custom" badge
- *           and avatarUrl (if hasAvatarUpload) instead of the default avatar.
+ *           and the default avatar.
  *    /api/v7/custom-agents is keyed by the x-key-hash header, same as the
  *    rest of the v7 key-gated API (window.KeyGate.apiFetch).
  * =====================================================================
@@ -72,15 +72,12 @@
  *   PUT    /api/v7/custom-agents/:id          -> { agent } | 400/404 { error }
  *   DELETE /api/v7/custom-agents/:id          -> { ok: true } | 404
  *   POST   /api/v7/custom-agents/clone        -> { draft } | 400/404 { error }
- *   GET    /api/v7/custom-agents/:id/avatar   -> image/jpeg | 404
  *
- * Avatar uploads arrive as a data:image/*;base64 dataUrl in the JSON body.
- * They are decoded to DATA_DIR/avatars_custom/<id>.jpg; the JSON record
- * keeps only { kind:'upload' } (no bulky dataUrl in the store file).
+ * v7.5: avatar/profile-picture upload was removed. All custom agents use
+ * the default phone-caller avatar. The old `GET /:id/avatar` route and the
+ * DATA_DIR/avatars_custom file storage are gone.
  */
 
-var fs = require('fs');
-var path = require('path');
 var url = require('url');
 
 function mount(api, ctx) {
@@ -97,7 +94,6 @@ function mount(api, ctx) {
   if (!customAgents) throw new Error('ctx.customAgents required');
 
   var store = new customAgents.CustomAgentStore(dataDir);
-  var avatarDir = path.join(dataDir, 'avatars_custom');
 
   function keyHashOfReq(req) {
     var h = (req.headers && (req.headers['x-key-hash'] || req.headers['x-keyhash'])) || '';
@@ -106,29 +102,6 @@ function mount(api, ctx) {
       h = q.keyHash || '';
     }
     return customAgents.isKeyHash(h) ? String(h) : null;
-  }
-
-  function avatarPath(id) {
-    if (!/^[A-Za-z0-9_.-]+$/.test(String(id))) return null; // path-safety
-    return path.join(avatarDir, String(id) + '.jpg');
-  }
-
-  function storeAvatar(id, dataUrl) {
-    if (typeof dataUrl !== 'string') return;
-    var m = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(dataUrl);
-    if (!m) return;
-    if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
-    var p = avatarPath(id);
-    if (!p) return;
-    var buf = Buffer.from(m[2], 'base64');
-    var tmp = p + '.tmp.' + process.pid;
-    fs.writeFileSync(tmp, buf);
-    fs.renameSync(tmp, p);
-  }
-
-  function removeAvatar(id) {
-    var p = avatarPath(id);
-    if (p && fs.existsSync(p)) { try { fs.unlinkSync(p); } catch (e) {} }
   }
 
   async function parseJsonBody(req) {
@@ -165,19 +138,10 @@ function mount(api, ctx) {
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
     }
 
-    var idMatch = /^\/api\/v7\/custom-agents\/([^/]+)(\/avatar)?$/.exec(pathname);
+    var idMatch = /^\/api\/v7\/custom-agents\/([^/]+)$/.exec(pathname);
     var isRoot = pathname === '/api/v7/custom-agents';
 
     if (!isRoot && !idMatch) return false;
-
-    if (method === 'GET' && idMatch && idMatch[2] === '/avatar') {
-      var aid = decodeURIComponent(idMatch[1]);
-      var p = avatarPath(aid);
-      if (!p || !fs.existsSync(p)) return sendJson(res, 404, { error: 'avatar not found' });
-      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400' });
-      fs.createReadStream(p).pipe(res);
-      return true;
-    }
 
     var kh = keyHashOfReq(req);
     if (!kh) return sendJson(res, 400, { error: 'missing or invalid x-key-hash header (or ?keyHash=)' });
@@ -198,16 +162,8 @@ function mount(api, ctx) {
     if (method === 'POST' && isRoot) {
       var createBody;
       try { createBody = await parseJsonBody(req); } catch (e) { return sendJson(res, 400, { error: e.message }); }
-      var av = createBody.avatar;
-      var dataUrl = (av && av.kind === 'upload') ? av.dataUrl : null;
       try {
         var created = await store.create(kh, createBody);
-        if (dataUrl) {
-          storeAvatar(created.id, dataUrl);
-          await store.update(kh, created.id, Object.assign({}, createBody, { avatar: { kind: 'upload' } }));
-          created = store.get(kh, created.id);
-          created.avatar = { kind: 'upload' };
-        }
         return sendJson(res, 201, { agent: customAgents.publicCustomAgent(created) });
       } catch (e) {
         return sendJson(res, e.code === 'VALIDATION' ? 400 : 500, { error: e.message });
@@ -218,15 +174,8 @@ function mount(api, ctx) {
       var uid = decodeURIComponent(idMatch[1]);
       var updateBody;
       try { updateBody = await parseJsonBody(req); } catch (e) { return sendJson(res, 400, { error: e.message }); }
-      var newAv = updateBody.avatar;
       try {
         var updated = await store.update(kh, uid, updateBody);
-        if (newAv && newAv.kind === 'upload' && newAv.dataUrl) {
-          storeAvatar(uid, newAv.dataUrl);
-          updated = await store.update(kh, uid, Object.assign({}, updateBody, { avatar: { kind: 'upload' } }));
-        } else if (newAv && newAv.kind === 'default') {
-          removeAvatar(uid);
-        }
         return sendJson(res, 200, { agent: customAgents.publicCustomAgent(updated) });
       } catch (e) {
         return sendJson(res, e.code === 'VALIDATION' ? 400 : e.code === 'NOT_FOUND' ? 404 : 500, { error: e.message });
@@ -237,7 +186,6 @@ function mount(api, ctx) {
       var did = decodeURIComponent(idMatch[1]);
       try {
         await store.remove(kh, did);
-        removeAvatar(did);
         return sendJson(res, 200, { ok: true });
       } catch (e) {
         return sendJson(res, e.code === 'NOT_FOUND' ? 404 : 500, { error: e.message });

@@ -213,6 +213,19 @@ MemoryStore.prototype.setSummary = async function (id, summary) {
 };
 
 /**
+ * Link a history call id (call_...) to a memory entry (mem_...). The Memory
+ * page uses it to offer the device recording download for that call.
+ * Idempotent, no-op if the entry is not found.
+ */
+MemoryStore.prototype.setCallId = async function (id, callId) {
+  await this._atomic(function (all) {
+    var e = all.find(function (x) { return x.id === id; });
+    if (e) e.callId = String(callId);
+    return { next: all };
+  });
+};
+
+/**
  * v7 auto-cleanup: drop memory entries (notes + transcripts) whose
  * startedAt is older than `days`. Entries with no/invalid startedAt are
  * kept. Returns the removed count.

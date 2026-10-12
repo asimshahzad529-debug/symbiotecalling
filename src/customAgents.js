@@ -25,7 +25,6 @@ var MAX_NAME = 60;
 var MAX_NUMBER = 24;
 var MAX_ROLE = 120;
 var MAX_PROMPT = 4000;
-var MAX_AVATAR_BYTES = 500 * 1024; // ~500KB cap on uploaded avatar data URLs
 
 function isKeyHash(h) { return /^[0-9a-f]{64}$/.test(String(h || '')); }
 
@@ -45,8 +44,11 @@ function digitsOf(number) { return String(number || '').replace(/\D/g, ''); }
 
 /**
  * validate(data) -> { ok:true, value } | { ok:false, error }.
- * value is the cleaned record: { name, number, role, tone, voice, prompt, avatar }.
- * avatar is normalized to { kind: 'upload', dataUrl } or { kind: 'default' }.
+ * value is the cleaned record: { name, number, role, tone, voice, prompt }.
+ * v7.5: avatar/profile-picture upload was removed from the builder. Any
+ * `avatar` input is silently ignored, and legacy records that still carry
+ * an `avatar` field keep it in storage but it is never read — every custom
+ * agent uses the default phone-caller avatar.
  */
 function validate(data) {
   data = data || {};
@@ -70,26 +72,8 @@ function validate(data) {
   }
   var prompt = typeof data.prompt === 'string' ? data.prompt : '';
   if (prompt.length > MAX_PROMPT) return { ok: false, error: 'prompt must be <= ' + MAX_PROMPT + ' characters' };
-  var avatar = { kind: 'default' };
-  if (data.avatar && typeof data.avatar === 'object') {
-    if (data.avatar.kind === 'upload') {
-      var du = data.avatar.dataUrl;
-      if (du === undefined || du === null || du === '') {
-        avatar = { kind: 'upload' }; // bytes managed separately (API writes the file)
-      } else {
-        if (typeof du !== 'string' || !/^data:image\/[a-zA-Z+]+;base64,/.test(du)) {
-          return { ok: false, error: 'avatar.dataUrl must be a data:image/*;base64 URL' };
-        }
-        if (Buffer.byteLength(du, 'utf8') > MAX_AVATAR_BYTES) {
-          return { ok: false, error: 'avatar image is too large (max ~500KB)' };
-        }
-        avatar = { kind: 'upload', dataUrl: du };
-      }
-    } else if (data.avatar.kind && data.avatar.kind !== 'default') {
-      return { ok: false, error: 'avatar.kind must be "upload" or "default"' };
-    }
-  }
-  return { ok: true, value: { name: name, number: number, role: role, tone: tone, voice: voice, prompt: prompt, avatar: avatar } };
+  // v7.5: avatar uploads removed — any avatar input is ignored (stripped).
+  return { ok: true, value: { name: name, number: number, role: role, tone: tone, voice: voice, prompt: prompt } };
 }
 
 function CustomAgentStore(dataDir) {
@@ -173,9 +157,6 @@ CustomAgentStore.prototype.update = async function (keyHash, id, data) {
     var idx = list.findIndex(function (a) { return a.id === id; });
     if (idx < 0) { var nf = new Error('custom agent not found'); nf.code = 'NOT_FOUND'; throw nf; }
     var merged = Object.assign({}, v.value);
-    if (!data || data.avatar === undefined || data.avatar === null) {
-      merged.avatar = list[idx].avatar || { kind: 'default' }; // keep existing avatar when untouched
-    }
     var rec = Object.assign({}, list[idx], merged, { id: list[idx].id, createdAt: list[idx].createdAt, isCustom: true });
     list[idx] = rec;
     self._writeAll(keyHash, list);
@@ -213,8 +194,7 @@ function cloneFrom(keyHash, sourceAgent) {
     role: sourceAgent.role || sourceAgent.niche || '',
     tone: sourceAgent.tone || 'professional',
     voice: sourceAgent.voice || '',
-    prompt: sourceAgent.prompt || '',
-    avatar: { kind: 'default' }
+    prompt: sourceAgent.prompt || ''
   });
   if (!v.ok) throw new Error('cannot clone source agent: ' + v.error);
   v.value.clonedFrom = sourceAgent.id || null;
@@ -233,6 +213,10 @@ var TONE_LINES = {
  * { id, name, gender, niche, number, voice, color, tagline, prompt,
  *   isCustom:true, hasAvatarUpload, avatarUrl } so it drops straight into
  * bridge/publicAgent, buildAgentInstruction, and Live session setup.
+ *
+ * v7.5: avatar upload was removed — custom agents always use the default
+ * phone-caller avatar, so hasAvatarUpload is always false and avatarUrl
+ * always null (a legacy `avatar` field on the stored record is ignored).
  */
 function toAgent(custom) {
   if (!custom || typeof custom !== 'object') throw new Error('custom agent required');
@@ -246,7 +230,7 @@ function toAgent(custom) {
     'Follow the role limits in your description exactly (no diagnosis, no legal advice, no transactions, no secrets, no therapy).',
     'This is a demo calling system, not an emergency service.'
   );
-  var hasUpload = !!(custom.avatar && custom.avatar.kind === 'upload');
+  var hasUpload = false; // v7.5: avatar uploads removed; always the default avatar
   return {
     id: custom.id,
     name: custom.name,
@@ -261,7 +245,7 @@ function toAgent(custom) {
     rawPrompt: custom.prompt || '',
     isCustom: true,
     hasAvatarUpload: hasUpload,
-    avatarUrl: hasUpload ? '/api/v7/custom-agents/' + encodeURIComponent(custom.id) + '/avatar' : null
+    avatarUrl: null
   };
 }
 
@@ -271,7 +255,7 @@ function publicCustomAgent(custom) {
   return {
     id: a.id, name: a.name, number: a.number, role: a.role, tone: custom.tone,
     voice: a.voice, prompt: custom.prompt || '', isCustom: true,
-    hasAvatarUpload: a.hasAvatarUpload, avatarUrl: a.avatarUrl,
+    hasAvatarUpload: false, avatarUrl: null,
     createdAt: custom.createdAt || null
   };
 }
@@ -320,6 +304,5 @@ module.exports = {
   directorySection: directorySection,
   listVoices: listVoices,
   TONES: TONES,
-  isKeyHash: isKeyHash,
-  MAX_AVATAR_BYTES: MAX_AVATAR_BYTES
+  isKeyHash: isKeyHash
 };

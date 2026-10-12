@@ -33,7 +33,7 @@
   if (themeCb) themeCb.onchange = function (e) { applyTheme(e.target.checked ? 'dark' : 'light'); };
 
   /* ---------- tabs (v7: Agents / Custom Agents / Dashboard / Dialer /
-     History / Memory / Docs(link) / Settings) ---------- */
+     Agents / Custom Agents / Dashboard / Dialer / Memory / Docs(link) / Settings) ---------- */
   var tabs = $('tabs');
   function switchTab(view) {
     tabs.querySelectorAll('button').forEach(function (x) { x.classList.toggle('active', x.dataset.view === view); });
@@ -42,7 +42,6 @@
     if (view === 'customagents' && window.CustomAgents) window.CustomAgents.renderPage($('customAgentsRoot'));
     if (view === 'dashboard') { loadStats(); loadDashboardRecents(); }
     if (view === 'dialer') renderDialRecents();
-    if (view === 'history') loadHistory();
     if (view === 'memory') loadMemories();
     if (view === 'settings') { refreshKeyState(); }
   }
@@ -135,6 +134,26 @@
     });
   }
 
+  /* ---------- v7.5 reactivity: custom-agent changes refresh instantly ----------
+   * custom-agents.js emits `custom-agents-changed` (via public/custom-events.js)
+   * after every successful create/update/delete. Both consumers subscribe here
+   * through one refresh: loadAgents() re-merges built-ins + the ACTIVE key's
+   * custom agents into AGENTS, re-renders the directory (renderDirectoryView),
+   * and the dialer filters the same AGENTS list — so the agent appears in the
+   * Agents list AND is dialable immediately, with no page reload. Refreshes are
+   * serialized: a second event while one refresh is in flight queues exactly
+   * one follow-up run. */
+  var agentsRefreshRunning = false, agentsRefreshQueued = false;
+  function queueAgentsRefresh() {
+    if (agentsRefreshRunning) { agentsRefreshQueued = true; return; }
+    agentsRefreshRunning = true;
+    loadAgents().catch(function () {}).then(function () {
+      agentsRefreshRunning = false;
+      if (agentsRefreshQueued) { agentsRefreshQueued = false; queueAgentsRefresh(); }
+    });
+  }
+  window.addEventListener('custom-agents-changed', function () { queueAgentsRefresh(); });
+
   /* ---------- dashboard ---------- */
   function el(tag, cls, text) {
     var d = document.createElement(tag);
@@ -206,6 +225,21 @@
         sfx('tap');
         startCall({ number: entry.number, agentId: entry.agentId });
       });
+    } catch (e) {}
+  }
+  /* ---------- v7.5: dialer recents follow the active key ----------
+   * Dialer recents are per-key partitions (CallX.recents.setScope). Re-scope
+   * on boot and on every key switch so one key's recents never show under
+   * another key, then re-render the dialer recents view. */
+  function scopeRecentsToActiveKey() {
+    try {
+      if (window.KeyGate && typeof window.KeyGate.getKeyHash === 'function' &&
+          window.CallX && window.CallX.recents && typeof window.CallX.recents.setScope === 'function') {
+        window.KeyGate.getKeyHash().then(function (kh) {
+          window.CallX.recents.setScope(kh);
+          renderDialRecents();
+        }).catch(function () {});
+      }
     } catch (e) {}
   }
   /* ---------- dialer ---------- */
@@ -296,110 +330,6 @@
     var d = new Date(iso);
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  /* ---------- history (v7: client-side filters over /api/history) ---------- */
-  var histFilters = { agentId: 'any', from: '', to: '', status: 'any' };
-  function histFilterValues() {
-    var g = function (id) { var n = $(id); return n ? n.value : ''; };
-    return { agentId: g('histFilterAgent') || 'any', from: g('histFilterFrom'), to: g('histFilterTo'), status: g('histFilterStatus') || 'any' };
-  }
-  function populateHistAgentFilter() {
-    var sel = $('histFilterAgent');
-    if (!sel || sel.options.length > 1) return;
-    AGENTS.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); })
-      .forEach(function (a) {
-        var o = document.createElement('option');
-        o.value = a.id; o.textContent = a.name + ' — ' + (a.niche || a.role || '');
-        sel.appendChild(o);
-      });
-  }
-  ['histFilterAgent', 'histFilterFrom', 'histFilterTo', 'histFilterStatus'].forEach(function (id) {
-    var n = $(id);
-    if (n) n.addEventListener('change', function () { histFilters = histFilterValues(); loadHistory(); });
-  });
-  async function loadHistory() {
-    var list = $('historyList'), detail = $('histDetail');
-    detail.classList.add('hidden'); detail.innerHTML = '';
-    list.innerHTML = '';
-    populateHistAgentFilter();
-    try {
-      var r = await apiFetch('api/history'); var j = await r.json();
-      lastHistoryCalls = j.calls || [];
-      var calls = lastHistoryCalls.slice().reverse();
-      if (window.Hygiene) calls = window.Hygiene.filterHistory(calls, histFilters);
-      if (!calls.length) { list.innerHTML = '<p class="dim">No calls match — your history will appear here.</p>'; return; }
-      calls.forEach(function (c) {
-        var a = AGENTS.find(function (x) { return x.id === c.agentId; });
-        var d = document.createElement('div'); d.className = 'hrow';
-        d.innerHTML = '<div class="who"><div class="avatar"></div><div><div class="a-name"></div>' +
-          '<div class="dim mono tiny"></div></div></div><div class="mono dim tiny"></div>';
-        d.querySelector('.avatar').innerHTML = avatarHTML({ id: c.agentId || '?', color: a ? a.color : '#666' });
-        d.querySelector('.a-name').textContent = c.agentName || 'Unknown';
-        d.querySelectorAll('.dim')[0].textContent = (c.number || '') + ' · ' + fmtWhen(c.startedAt);
-        d.querySelectorAll('.mono')[1].textContent = fmtDur(c.durationSec);
-        var b = document.createElement('button'); b.className = 'btn ghost'; b.type = 'button';
-        b.innerHTML = ICON_PHONE; b.title = 'Call again'; b.setAttribute('aria-label', 'Call again');
-        b.onclick = function (e) { e.stopPropagation(); startCall({ agentId: c.agentId }); };
-        d.appendChild(b); list.appendChild(d);
-        d.style.cursor = 'pointer';
-        d.onclick = function () { openHistoryDetail(c.id); };
-      });
-    } catch (e) { list.innerHTML = '<p class="dim">Could not load history.</p>'; }
-  }
-  $('clearHistory').onclick = async function () {
-    if (!confirm('Clear all call history?')) return;
-    await apiFetch('api/history', { method: 'DELETE' }); loadHistory();
-  };
-
-  /* Per-call detail: summary + device recording. */
-  async function openHistoryDetail(id) {
-    var detail = $('histDetail'), list = $('historyList');
-    var calls = [];
-    try { calls = ((await (await apiFetch('api/history')).json()).calls) || []; } catch (e) { return; }
-    var c = null;
-    for (var i = 0; i < calls.length; i++) if (calls[i].id === id) { c = calls[i]; break; }
-    if (!c) return;
-    var a = AGENTS.find(function (x) { return x.id === c.agentId; });
-    list.innerHTML = '';
-    detail.classList.remove('hidden');
-    detail.innerHTML =
-      '<div class="card mem-detail"><div class="mem-head"><button class="btn ghost" id="histBack" type="button">← Back</button></div>' +
-      '<div class="a-top"><div class="avatar" id="histAvatar"></div><div><div class="a-name" id="histName"></div>' +
-      '<div class="dim tiny" id="histMeta"></div></div></div>' +
-      '<div class="det-sec"><h3>Summary</h3><div class="det-summary" id="histSummary"></div></div>' +
-      '<div class="det-sec"><h3>Recording</h3><p class="dim tiny" id="histRecState">Checking…</p>' +
-      '<div class="det-row-btns"><button class="btn ghost" id="histRecDl" type="button">Download audio</button>' +
-      '<button class="btn ghost danger" id="histRecDel" type="button">Delete recording</button></div></div></div>';
-    $('histAvatar').innerHTML = avatarHTML({ id: c.agentId || '?', color: a ? a.color : '#666' });
-    $('histName').textContent = c.agentName || 'Unknown';
-    $('histMeta').textContent = (c.number || '') + ' · ' + fmtWhen(c.startedAt) + ' · ' + fmtDur(c.durationSec);
-    $('histSummary').textContent = c.summary || 'No summary for this call.';
-    $('histBack').onclick = loadHistory;
-    var dl = $('histRecDl'), del = $('histRecDel'), st = $('histRecState');
-    dl.style.display = 'none'; del.style.display = 'none';
-    idb.get(id).then(function (rec) {
-      if (rec && rec.blob) {
-        st.textContent = 'Recorded on this device — never uploaded.';
-        dl.style.display = ''; del.style.display = '';
-        dl.onclick = function () {
-          var u = URL.createObjectURL(rec.blob);
-          var aEl = document.createElement('a');
-          aEl.href = u; aEl.download = 'call-' + id + '.webm';
-          document.body.appendChild(aEl); aEl.click(); aEl.remove();
-          setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
-        };
-        del.onclick = function () {
-          if (!confirm('Delete this recording?')) return;
-          idb.del(id).then(function () {
-            dl.style.display = 'none'; del.style.display = 'none';
-            st.textContent = 'No recording for this call.';
-          }).catch(function () {});
-        };
-      } else {
-        st.textContent = 'No recording for this call.';
-      }
-    }).catch(function () { st.textContent = 'No recording for this call.'; });
-  }
-
   /* ---------- memory ---------- */
   function memWhen(iso) {
     if (!iso) return '';
@@ -429,6 +359,10 @@
       });
     } catch (e) { list.innerHTML = '<p class="dim">Could not load memories.</p>'; }
   }
+  /* Memory detail (v7.5): the AI-written post-call summary ONLY. Full
+   * transcripts are never rendered inline — they download as a text file.
+   * The device recording (keyed by the memory entry's callId, linked
+   * server-side at call start) downloads too when one exists. */
   async function openMemory(id) {
     var detail = $('memoryDetail'), list = $('memoryList');
     try {
@@ -438,27 +372,18 @@
       var a = AGENTS.find(function (x) { return x.id === m.agentId; });
       list.innerHTML = '';
       detail.classList.remove('hidden');
-      var notesHtml = (m.notes && m.notes.length)
-        ? m.notes.map(function (n) { return '<li></li>'; }).join('')
-        : '<li class="dim">No notes recorded on this call.</li>';
-      var trHtml = (m.transcript && m.transcript.length)
-        ? m.transcript.map(function (t) { return '<div class="cbub ' + (t.who === 'user' ? 'user' : 'omni') + '"></div>'; }).join('')
-        : '<p class="dim">No transcript captured.</p>';
       detail.innerHTML =
         '<div class="card mem-detail"><div class="mem-head"><button class="btn ghost" id="memBack" type="button">← Back</button>' +
         '<button class="btn ghost danger" id="memDelete" type="button">Delete</button></div>' +
         '<div class="a-top"><div class="avatar" id="memAvatar"></div><div><div class="a-name" id="memName"></div>' +
         '<div class="dim tiny" id="memMeta"></div></div></div>' +
-        '<h3>Notes & appointments</h3><ul class="notes" id="memNotes">' + notesHtml + '</ul>' +
-        '<h3>Transcript</h3><div class="chat-log mem-log" id="memTranscript">' + trHtml + '</div>' +
-      '<div class="det-row-btns"><button class="btn ghost" id="memDlTranscript" type="button">Download transcript</button></div></div>';
+        '<div class="det-sec"><h3>Summary</h3><div class="det-summary" id="memSummary"></div></div>' +
+        '<div class="det-row-btns"><button class="btn ghost" id="memDlTranscript" type="button">Download transcript</button>' +
+        '<button class="btn ghost" id="memDlAudio" type="button" style="display:none">Download audio</button></div></div>';
       $('memAvatar').innerHTML = avatarHTML({ id: m.agentId || '?', color: a ? a.color : '#666' });
       $('memName').textContent = m.agentName || 'Unknown';
       $('memMeta').textContent = (m.number || '') + ' · ' + memWhen(m.startedAt) + ' · ' + fmtDur(m.durationSec);
-      var noteLis = detail.querySelectorAll('#memNotes li');
-      (m.notes || []).forEach(function (n, i) { if (noteLis[i]) noteLis[i].textContent = n.text; });
-      var trBubs = detail.querySelectorAll('#memTranscript .cbub');
-      (m.transcript || []).forEach(function (t, i) { if (trBubs[i]) trBubs[i].textContent = t.text; });
+      $('memSummary').textContent = m.summary || 'No summary for this call.';
       $('memBack').onclick = loadMemories;
       var memDlT = $('memDlTranscript');
       if (memDlT) memDlT.onclick = function () {
@@ -467,6 +392,23 @@
           if (window.CallX) CallX.downloadTranscript(id, { lines: m.transcript, agentName: m.agentName });
         } catch (e) {}
       };
+      // Device recording download: shown only when a recording exists for
+      // this call (IndexedDB, device only — never uploaded).
+      var memDlA = $('memDlAudio');
+      if (m.callId && memDlA) {
+        idb.get(m.callId).then(function (rec) {
+          if (!rec || !rec.blob) return;
+          memDlA.style.display = '';
+          memDlA.onclick = function () {
+            sfx('tap');
+            var u = URL.createObjectURL(rec.blob);
+            var aEl = document.createElement('a');
+            aEl.href = u; aEl.download = 'call-' + String(m.callId).replace(/[^A-Za-z0-9_-]/g, '_') + '.webm';
+            document.body.appendChild(aEl); aEl.click(); aEl.remove();
+            setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
+          };
+        }).catch(function () {});
+      }
       $('memDelete').onclick = async function () {
         if (!confirm('Delete this memory?')) return;
         await apiFetch('api/memories/' + encodeURIComponent(id), { method: 'DELETE' });
@@ -484,7 +426,7 @@
       var mems = ((await (await apiFetch('api/memories')).json()).memories) || [];
       var calls = ((await (await apiFetch('api/history')).json()).calls) || [];
       var payload = JSON.stringify({
-        app: 'symbiote-calling', version: '7.0.0',
+        app: 'symbiote-calling', version: '7.5.0',
         exportedAt: new Date().toISOString(), memories: mems, history: calls
       }, null, 2);
       var blob = new Blob([payload], { type: 'application/json' });
@@ -513,11 +455,10 @@
       });
       if (!r.ok) { alert('Restore failed.'); return; }
       loadMemories();
-      if (document.querySelector('#view-history').classList.contains('active')) loadHistory();
     } catch (err) { alert('Could not read that file.'); }
   });
 
-  /* ---------- settings (v7: key profiles + accent + retention) ---------- */
+  /* ---------- settings (v7.5: key profiles + accent color only) ---------- */
   function refreshKeyState() {
     var s = $('keyState');
     if (!s) return;
@@ -548,13 +489,22 @@
         settings.apiKey = activeApiKey();
         refreshKeyState();
         loadAgents().catch(function () {});
+        scopeRecentsToActiveKey();
       }, 800);
     }
   };
-  $('modelInput').value = settings.model;
-  $('modelInput').addEventListener('input', function (e) { settings.model = e.target.value.trim() || 'gemini-3.8-live'; persistSettings(); });
-  $('micDefault').checked = settings.mic;
-  $('micDefault').addEventListener('change', function (e) { settings.mic = e.target.checked; persistSettings(); });
+  // Call preferences (model / mic) were removed from Settings in v7.5 —
+  // the saved values below keep working for users who set them before.
+  var modelInput = $('modelInput');
+  if (modelInput) {
+    modelInput.value = settings.model;
+    modelInput.addEventListener('input', function (e) { settings.model = e.target.value.trim() || 'gemini-3.8-live'; persistSettings(); });
+  }
+  var micCb = $('micDefault');
+  if (micCb) {
+    micCb.checked = settings.mic;
+    micCb.addEventListener('change', function (e) { settings.mic = e.target.checked; persistSettings(); });
+  }
 
   /* ---------- accent color picker (WS7 hygiene) ---------- */
   function buildAccentRow() {
@@ -951,7 +901,10 @@
         setCallState('Call ended');
         chatBubble('omni', (msg.name || 'Agent') + ' ended the call.');
         break;
-      case 'diag': $('diagBox').textContent = JSON.stringify(msg, null, 1); break;
+      case 'diag':
+        var diagBox = $('diagBox');
+        if (diagBox) diagBox.textContent = JSON.stringify(msg, null, 1);
+        break;
       case 'error':
         if (msg.code === 'NO_SUCH_NUMBER') { setCallState('Number not in service', 'err'); setTimeout(teardown, 1800); }
         else if (msg.code === 'NO_KEY') { setCallState('Add your API key in Settings', 'err'); setTimeout(teardown, 2200); }
@@ -987,7 +940,6 @@
     callAgent = null;
     $('callOverlay').classList.add('hidden');
     $('callOverlay').setAttribute('aria-hidden', 'true');
-    if (document.querySelector('#view-history').classList.contains('active')) loadHistory();
     if (document.querySelector('#view-dashboard').classList.contains('active')) loadDashboardRecents();
   }
 
@@ -1048,7 +1000,7 @@
   window.addEventListener('beforeunload', function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hangup' })); });
 
   var f = document.createElement('footer'); f.className = 'note';
-  f.textContent = 'Symbiote Calling v7.0 · 101 agents + your custom agents · local demo — fictional numbers, not a real phone network.';
+  f.textContent = 'Symbiote Calling v7.5 · 101 agents + your custom agents · local demo — fictional numbers, not a real phone network.';
   document.getElementById('main').appendChild(f);
 
   /* ---------- v7 boot: key login gates everything ---------- */
@@ -1064,6 +1016,7 @@
     refreshKeyState();
     idbPruneOnBoot();
     try { await loadAgents(); } catch (e) {}
+    scopeRecentsToActiveKey();
     renderDialRecents();
   })();
 })();

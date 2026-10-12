@@ -90,6 +90,17 @@ module.exports = {
     await m.clear();
     assert.strictEqual(m.list().length, 0);
   },
+  'setCallId links a history call id onto a memory entry': async function () {
+    var m = tmpMemory();
+    var kh = m.keyHash('KEY-A');
+    var id = await m.beginCall({ keyHash: kh, agentId: 'ava', agentName: 'Ava', number: 'x' });
+    assert.strictEqual(m.get(id).callId, undefined, 'no callId before linking');
+    await m.setCallId(id, 'call_abc123');
+    assert.strictEqual(m.get(id).callId, 'call_abc123');
+    await m.setCallId(id, 'call_abc123'); // idempotent
+    assert.strictEqual(m.get(id).callId, 'call_abc123');
+    await m.setCallId('does-not-exist', 'call_zzz'); // no-op, must not throw
+  },
   'key itself is never stored — only its hash': async function () {
     var m = tmpMemory();
     await m.ensureScope(m.keyHash('super-secret-key-123'));

@@ -394,6 +394,24 @@ module.exports = {
     assert.strictEqual(s2.statusCode, 401, 'audit is owner-view: login required');
   },
 
+  'api: audit endpoint is per-key — one key never sees another key\'s entries': async function () {
+    var ctx = makeCtx(tmpdir());
+    var api = mountApi(ctx);
+    await ctx._ks.audit({ keyHash: KH_A, label: 'Work', event: 'call_start', agentId: 'ava' });
+    await ctx._ks.audit({ keyHash: KH_B, label: 'Home', event: 'call_start', agentId: 'marco' });
+    await ctx._ks.audit({ keyHash: KH_B, label: 'Home', event: 'call_end', agentId: 'marco' });
+    var sA = {};
+    api.handle(fakeReq('GET', '/api/v7/audit', { 'x-key-hash': KH_A }), sA);
+    assert.strictEqual(sA.statusCode, 200);
+    assert.strictEqual(sA.body.entries.length, 1, 'key A sees only its own entry');
+    assert.strictEqual(sA.body.entries[0].keyHash, KH_A);
+    var sB = {};
+    api.handle(fakeReq('GET', '/api/v7/audit', { 'x-key-hash': KH_B }), sB);
+    assert.strictEqual(sB.statusCode, 200);
+    assert.strictEqual(sB.body.entries.length, 2, 'key B sees its two entries');
+    assert.ok(sB.body.entries.every(function (e) { return e.keyHash === KH_B; }));
+  },
+
   'api: unknown v7 path is not handled': async function () {
     var ctx = makeCtx(tmpdir());
     var api = mountApi(ctx);

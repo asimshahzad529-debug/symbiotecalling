@@ -11,6 +11,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Symbiote Calling — User Guide</title>
+<link rel="icon" type="image/jpeg" href="/avatars/symagent.jpg">
 <link rel="stylesheet" href="styles.css">
 <style>
 /* Docs-only styles. Everything else reuses the app's CSS variables. */
@@ -56,6 +57,15 @@ html{scroll-behavior:smooth}
 .dsec li{margin:.28rem 0}
 .dsec .mono{font-size:.82em;background:var(--panel2);border:1px solid var(--line);
   border-radius:6px;padding:.08em .4em;white-space:nowrap}
+/* Inline cross-links: accent-tinted, part of the sentence, wrap naturally. */
+.dsec a.xref{color:var(--acc);font-weight:600;text-decoration:none}
+.dsec a.xref:hover{text-decoration:underline}
+/* External URL pills: mono look, but allowed to break mid-URL so they never
+   force an awkward ragged line or overflow on narrow screens. */
+.dsec a.url{font-family:ui-monospace,Menlo,monospace;font-size:.86em;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:.08em .4em;color:var(--acc);
+  text-decoration:none;overflow-wrap:anywhere}
+.dsec a.url:hover{border-color:var(--acc)}
 .callout{border:1px solid var(--line2);border-left:3px solid var(--acc);border-radius:10px;
   background:var(--panel2);padding:.65rem .9rem;margin:.8rem 0;font-size:.88rem;color:var(--ink2)}
 .callout.warn{border-left-color:var(--err)}
@@ -126,19 +136,17 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
       <p>Symbiote Calling runs voice calls through Google's Gemini Live — you bring your own API key, and the app does the rest.</p>
       <ol class="steps">
         <li>Open the app and head to <strong>Settings</strong>.</li>
-        <li>Paste <strong>one Gemini API key</strong> (get a free one from <span class="mono">aistudio.google.com/apikey</span>) — it powers every agent.</li>
-        <li>Your key is your login: the app stays behind the key screen until a key is entered, and your data belongs to your key (see <a href="#memory-persistence">Memory &amp; persistence</a>).</li>
+        <li>Paste <strong>one Gemini API key</strong> — it powers every agent. Need one? Grab a free key at <a class="url" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</li>
+        <li>Your key is your login: the app stays behind the key screen until a key is entered, and everything you save belongs to that key. <a class="xref" href="#memory-persistence">Memory &amp; persistence</a> explains exactly how that works.</li>
         <li>Go to <strong>Agents</strong> and tap <strong>Call</strong> on anyone.</li>
       </ol>
       <div class="callout ok"><b>Your key is never stored.</b> It lives in server memory for the call only — never written to disk, never logged, never put in a URL. The Settings page shows only a status line like "Key set for this page session".</div>
       <h3>Key profiles</h3>
       <p>If you juggle more than one key (say, a personal key and a demo key), you can save named <strong>key profiles</strong> and switch between them from the key screen — each profile keeps its own calls, memories, and custom agents.</p>
-      <h3>Other settings worth knowing</h3>
+      <h3>Appearance</h3>
       <ul>
-        <li><strong>Model</strong> — you can change the Live model order yourself (default: <span class="mono">gemini-3.8-live</span>, with cheaper/fallback models after it).</li>
-        <li><strong>Mic default</strong> — mic permission is requested only when a call starts; you can toggle the default here.</li>
-        <li><strong>Theme</strong> — light by default, one-tap dark mode (remembered).</li>
-        <li><strong>Accent color</strong> — pick an accent color and the whole app follows it.</li>
+        <li><strong>Theme</strong> — light by default, one-tap dark mode via the sun/moon button in the top bar (remembered).</li>
+        <li><strong>Accent color</strong> — pick an accent color in Settings and the whole app follows it.</li>
       </ul>
     </section>
 
@@ -185,11 +193,10 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
       <ul>
         <li><strong>Name</strong> — required.</li>
         <li><strong>Number</strong> — required; any random number works, it just has to be unique.</li>
-        <li><strong>Role</strong> — required; pick a niche or write your own custom role.</li>
+        <li><strong>Role</strong> — required; pick a niche or write your own.</li>
         <li><strong>Tone</strong> — pick from a few presets (e.g. professional, friendly) to shape how the agent speaks.</li>
         <li><strong>Voice</strong> — the <strong>voice picker</strong> lets you audition and assign a voice.</li>
         <li><strong>Prompt</strong> — optional custom instructions; start from a <strong>prompt template</strong> if you like.</li>
-        <li><strong>Profile picture</strong> — optional; use the <strong>avatar cropper</strong> to frame it, or leave it blank for the default caller avatar.</li>
       </ul>
       <p>There is <strong>no limit</strong> on how many you create. Custom agents are saved under your API-key profile, so the same key always reloads the same agents — and a different key never sees them.</p>
       <h3>Clone an agent</h3>
@@ -203,29 +210,24 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
       <ul>
         <li><strong>In-call notes</strong> — jot down notes during the call; they're saved with that call's record.</li>
         <li><strong>Recording</strong> — every call is recorded on your device (a red dot shows it's rolling). Recordings never leave your device.</li>
-        <li><strong>Chat &amp; keypad</strong> — covered in <a href="#making-calls">Making calls</a>.</li>
+        <li><strong>Chat &amp; keypad</strong> — covered in <a class="xref" href="#making-calls">Making calls</a>.</li>
       </ul>
       <h3>After you hang up</h3>
-      <p>Open the call in <strong>History</strong> (agent, number, time, duration) — its detail view holds everything the call produced:</p>
+      <p>Open the call on the <strong>Memory</strong> page — its detail view holds everything the call produced:</p>
       <ul>
         <li><strong>Auto summary</strong> — a short AI summary (a few lines + the outcome) is generated after each call, free and in the background, never blocking anything.</li>
-        <li><strong>Recording download / delete</strong> — play it back, keep it, or delete it.</li>
-        <li><strong>Transcript download &amp; search</strong> — download the full transcript or search inside it.</li>
-        <li><strong>Call back</strong> — one tap calls the agent again.</li>
+        <li><strong>Recording download</strong> — grab the device recording as an audio file. Recordings never leave your device.</li>
+        <li><strong>Transcript download</strong> — save the full transcript as a text file.</li>
       </ul>
-      <p>History also has <strong>filters</strong> so you can narrow calls by agent or date range, and the dashboard shows your <strong>recent calls</strong> at a glance.</p>
+      <p>The dashboard shows your <strong>recent calls</strong> at a glance, and the dialer has a <strong>recents</strong> tab to redial in one tap.</p>
     </section>
 
     <!-- ============================ 06 ============================ -->
     <section class="dsec" id="memory-persistence">
       <div class="dsec-head"><span class="dsec-num">06</span><h2>Memory &amp; persistence</h2></div>
       <h3>How memory works</h3>
-      <p>Agents remember you. Every call automatically saves two things to the <strong>Memory</strong> page:</p>
-      <ul>
-        <li><strong>Notes</strong> — appointments, facts, and lead details the agent records during the call.</li>
-        <li><strong>The full transcript</strong> — everything said on both sides.</li>
-      </ul>
-      <p>When you call the same agent again, its recent memories are injected into its prompt — so it picks up where you left off. Open any memory for the full detail view.</p>
+      <p>Agents remember you. Every call saves notes, appointments, and the full transcript behind the scenes — plus an <strong>AI-written summary</strong>. The <strong>Memory</strong> page shows that summary per call; open any entry to read it, or download the transcript or the device recording from the same view.</p>
+      <p>When you call the same agent again, its recent memories are injected into its prompt — so it picks up where you left off.</p>
       <h3>Your data belongs to your key</h3>
       <p>Memories and history are tied to your API key <em>by hash</em> — the key itself is never stored, only a fingerprint of it. Change the key and everything resets cleanly, so keys never cross-contaminate.</p>
       <h3>Keeping data across redeploys (Railway)</h3>
@@ -236,7 +238,7 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
         <li>Redeploy. History and memories now survive updates.</li>
       </ol>
       <div class="callout warn"><b>Tip:</b> before any big change, go to <strong>Memory → Download backup (JSON)</strong> for a local copy. <strong>Restore</strong> puts it back. Until you do the volume step, a redeploy wipes everything — that will look like a bug if you forget.</div>
-      <p>The app also runs <strong>auto-cleanup</strong> in the background so old data doesn't pile up forever, and an <strong>audit log</strong> records key data events for your own peace of mind.</p>
+      <p>The app also runs <strong>auto-cleanup</strong> in the background so old data doesn't pile up forever, and an <strong>audit log</strong> records important data events for your own peace of mind.</p>
     </section>
 
     <!-- ============================ 07 ============================ -->
@@ -262,7 +264,7 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
         <li><strong>Auto-deploy is on:</strong> every push to the connected branch redeploys, no manual step needed.</li>
         <li>Set env vars in the service's <strong>Variables</strong>:
           <ul>
-            <li><span class="mono">DATA_DIR=/data</span> — with a volume mounted at <span class="mono">/data</span> (see <a href="#memory-persistence">Memory &amp; persistence</a>).</li>
+            <li><span class="mono">DATA_DIR=/data</span> — with a volume mounted at <span class="mono">/data</span> (see the <a class="xref" href="#memory-persistence">Memory &amp; persistence</a> section for the full walkthrough).</li>
             <li><span class="mono">GEMINI_API_KEY</span> — optional. If set, the server has a fallback key; in practice each user enters their own key in the app, so this can stay empty.</li>
           </ul>
         </li>
@@ -286,7 +288,7 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
       <h3>Other hiccups</h3>
       <ul>
         <li><strong>Choppy audio</strong> — on a hosted tunnel the voice path can degrade; on the deployed server it should be clean. Check your connection first.</li>
-        <li><strong>"Search unavailable"</strong> — the agent's web search runs a 4-provider chain (DuckDuckGo instant → Wikipedia → Google News → DDG web). If all four are blocked, it says so rather than inventing answers. Try again later.</li>
+        <li><strong>"Search unavailable"</strong> — the agent's web search runs a 4-provider chain (DuckDuckGo instant → Wikipedia → Google News → DDG lite). If all four are blocked, it says so rather than inventing answers. Try again later.</li>
         <li><strong>Recording missing/empty</strong> — the mic was likely denied; allow it and call again.</li>
         <li><strong>Double greeting after transfer</strong> — report it; transfers should hand you over with a single greeting.</li>
       </ul>
@@ -303,9 +305,9 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
         <dt>Can I use it without a microphone?</dt>
         <dd>Yes — chat mode. Type your messages; the agent still answers by voice.</dd>
         <dt>Are my calls recorded?</dt>
-        <dd>On your device, for you. Recordings and transcripts never leave your device except into your own memory/backup — which is also yours.</dd>
+        <dd>On your device, for you. Recordings and transcripts never leave your device — they only ever land in your own memory page and backups, which are yours.</dd>
         <dt>Can I make my own agents?</dt>
-        <dd>Yes — the Custom Agents page (name, number, role, tone, voice, prompt, avatar), unlimited, saved per key. SymAgent even knows about them and can transfer callers to them.</dd>
+        <dd>Yes — the Custom Agents page (name, number, role, tone, voice, prompt), unlimited, saved per key. SymAgent even knows about them and can transfer callers to them.</dd>
         <dt>Does my data survive redeploys?</dt>
         <dd>Yes, if you did the <span class="mono">DATA_DIR=/data</span> volume step. Otherwise redeploys wipe it — keep a JSON backup from the Memory page.</dd>
         <dt>Why does SymAgent ask for my details instead of answering a question?</dt>

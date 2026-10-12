@@ -15,7 +15,7 @@
  *        Directory.renderDirectory($('agentGrid'), AGENTS, { initialQ: e.target.value });
  *      });
  *    Or call Directory.renderDirectory once with the full AGENTS list and let
- *    it own the search input + filter dropdowns it renders above the grid.
+ *    it own the search input it renders above the grid.
  * 3. Gesture contract (pass via renderDirectory opts):
  *      onCall(agent)     — swipe RIGHT or "Call" button → app.js startCall({ agentId: agent.id })
  *      onProfile(agent)  — card tap / swipe LEFT → Directory.profileSheet(agent, stats)
@@ -322,16 +322,7 @@
     return d;
   }
 
-  function distinctRoles(agents) {
-    var seen = {};
-    agents.forEach(function (a) {
-      var r = String(a.role || '').trim();
-      if (r) seen[r] = true;
-    });
-    return Object.keys(seen).sort();
-  }
-
-  function buildToolbar(container, agents) {
+  function buildToolbar(container) {
     var bar = el('div', 'dir-toolbar');
 
     var searchWrap = el('div', 'dir-search-wrap');
@@ -343,40 +334,8 @@
     searchWrap.appendChild(search);
     bar.appendChild(searchWrap);
 
-    var genderSel = el('select', 'dir-filter');
-    genderSel.setAttribute('aria-label', 'Filter by gender');
-    [['any', 'All genders'], ['male', 'Male'], ['female', 'Female']].forEach(function (g) {
-      var o = document.createElement('option');
-      o.value = g[0]; o.textContent = g[1];
-      if (filters.gender === g[0]) o.selected = true;
-      genderSel.appendChild(o);
-    });
-    bar.appendChild(genderSel);
-
-    var roleSel = el('select', 'dir-filter');
-    roleSel.setAttribute('aria-label', 'Filter by role');
-    var anyOpt = document.createElement('option');
-    anyOpt.value = 'any'; anyOpt.textContent = 'All roles';
-    if (filters.role === 'any') anyOpt.selected = true;
-    roleSel.appendChild(anyOpt);
-    distinctRoles(agents).forEach(function (r) {
-      var o = document.createElement('option');
-      o.value = r; o.textContent = r;
-      if (filters.role === r) o.selected = true;
-      roleSel.appendChild(o);
-    });
-    bar.appendChild(roleSel);
-
     search.addEventListener('input', function () {
       filters.q = search.value;
-      rerenderGrid(container);
-    });
-    genderSel.addEventListener('change', function () {
-      filters.gender = genderSel.value;
-      rerenderGrid(container);
-    });
-    roleSel.addEventListener('change', function () {
-      filters.role = roleSel.value;
       rerenderGrid(container);
     });
     return bar;
@@ -393,7 +352,8 @@
 
   // renderDirectory(container, agents, opts)
   // opts: { onCall(agent), onProfile(agent), stats, initialQ }
-  // Renders toolbar (search + gender/role dropdowns) and the filtered card grid.
+  // Renders the toolbar (search box only, v7.5 — the gender/role dropdowns
+  // were removed) and the filtered card grid.
   function renderDirectory(container, agents, opts) {
     if (!isBrowser() || !container) return;
     opts = opts || {};

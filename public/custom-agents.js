@@ -9,7 +9,7 @@
  * Exposed for other v7 modules (directory/dialer/history/stats merge):
  *   window.CustomAgents.mergeAgentLists(builtinList, customList)
  *   window.CustomAgents.fetchCustomAgents() -> Promise<[publicCustomAgent]>
- *   window.CustomAgents.avatarUrlFor(agent)
+ *   window.CustomAgents.avatarUrlFor(agent)   // v7.5: always null — default avatar only
  *   window.CustomAgents.PROMPT_TEMPLATES
  */
 
@@ -87,17 +87,31 @@
     return api(API, 'GET').then(function (j) { return j.agents || []; });
   }
 
+  /**
+   * v7.5 reactivity: after a custom agent is created/updated/deleted, tell
+   * the rest of the app (Agents list + dialer) to re-merge the directory for
+   * the active key — no page reload. No-op when custom-events.js isn't loaded.
+   */
+  function notifyChanged(action, id) {
+    try {
+      if (typeof window !== 'undefined' && window.CustomAgentEvents &&
+          typeof window.CustomAgentEvents.emitChanged === 'function') {
+        window.CustomAgentEvents.emitChanged({ action: action, id: id || null });
+      }
+    } catch (e) { /* notification is best-effort */ }
+  }
+
+  // v7.5: avatar upload was removed — every custom agent uses the default
+  // phone-caller avatar. Kept as a null-returning stub so external callers
+  // don't break.
   function avatarUrlFor(agent) {
-    if (!agent) return null;
-    if (agent.avatarUrl) return agent.avatarUrl;
-    if (agent.isCustom && agent.hasAvatarUpload) return API + '/' + encodeURIComponent(agent.id) + '/avatar';
     return null;
   }
 
   /**
    * mergeAgentLists(builtinList, customList) — directory/dialer/history/stats
    * rendering merge: built-ins first, then customs; customs carry a "Custom"
-   * badge and avatarUrl when they uploaded an avatar.
+   * badge and always the default avatar.
    */
   function mergeAgentLists(builtinList, customList) {
     var out = (builtinList || []).slice();
@@ -105,104 +119,12 @@
       var a = {
         id: c.id, name: c.name, niche: c.role || c.niche, number: c.number,
         voice: c.voice, tagline: c.role || '', color: '#7c3aed',
-        isCustom: true, hasAvatarUpload: !!c.hasAvatarUpload,
-        avatarUrl: avatarUrlFor(c), customBadge: 'Custom'
+        isCustom: true, hasAvatarUpload: false,
+        avatarUrl: null, customBadge: 'Custom'
       };
       out.push(a);
     });
     return out;
-  }
-
-  // ---------------- avatar cropper ----------------
-  // Canvas-based: drag to pan, wheel/slider to zoom, 256x256 circular JPEG out.
-  function openCropper(imgSrc, onDone) {
-    var overlay = el('div', 'ca-cropper-overlay');
-    var box = el('div', 'ca-cropper-box');
-    var title = el('div', 'ca-cropper-title', 'Crop avatar — drag to position, scroll or slide to zoom');
-    var canvas = document.createElement('canvas');
-    canvas.width = 320; canvas.height = 320;
-    canvas.className = 'ca-cropper-canvas';
-    var slider = document.createElement('input');
-    slider.type = 'range'; slider.min = '50'; slider.max = '400'; slider.value = '100';
-    slider.className = 'ca-cropper-zoom';
-    var row = el('div', 'ca-cropper-btns');
-    var ok = el('button', 'ca-btn ca-btn-primary', 'Use this');
-    var cancel = el('button', 'ca-btn', 'Cancel');
-    row.appendChild(ok); row.appendChild(cancel);
-    box.appendChild(title); box.appendChild(canvas); box.appendChild(slider); box.appendChild(row);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    var img = new Image();
-    var scale = 1, baseScale = 1, ox = 0, oy = 0;
-    var dragging = false, sx = 0, sy = 0, sox = 0, soy = 0;
-
-    function fitBase() {
-      baseScale = Math.max(canvas.width / img.width, canvas.height / img.height);
-      scale = parseFloat(slider.value) / 100;
-    }
-    function draw() {
-      var ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#f3f4f6'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      var s = baseScale * scale;
-      var w = img.width * s, h = img.height * s;
-      var cx = canvas.width / 2, cy = canvas.height / 2;
-      ctx.drawImage(img, cx - w / 2 + ox, cy - h / 2 + oy, w, h);
-      // dim outside the circular crop
-      ctx.save();
-      ctx.fillStyle = 'rgba(15,23,42,0.55)';
-      ctx.beginPath();
-      ctx.rect(0, 0, canvas.width, canvas.height);
-      ctx.arc(cx, cy, 128, 0, Math.PI * 2, true);
-      ctx.fill('evenodd');
-      ctx.restore();
-      ctx.strokeStyle = 'var(--accent, #7c3aed)';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(cx, cy, 128, 0, Math.PI * 2); ctx.stroke();
-    }
-    img.onload = function () { fitBase(); draw(); };
-    img.src = imgSrc;
-
-    canvas.addEventListener('pointerdown', function (e) {
-      dragging = true; sx = e.clientX; sy = e.clientY; sox = ox; soy = oy;
-      canvas.setPointerCapture(e.pointerId);
-    });
-    canvas.addEventListener('pointermove', function (e) {
-      if (!dragging) return;
-      var r = canvas.getBoundingClientRect();
-      var k = canvas.width / r.width;
-      ox = sox + (e.clientX - sx) * k; oy = soy + (e.clientY - sy) * k;
-      draw();
-    });
-    canvas.addEventListener('pointerup', function () { dragging = false; });
-    canvas.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      var v = parseFloat(slider.value) + (e.deltaY < 0 ? 10 : -10);
-      slider.value = String(Math.max(50, Math.min(400, v)));
-      scale = parseFloat(slider.value) / 100; draw();
-    }, { passive: false });
-    slider.addEventListener('input', function () { scale = parseFloat(slider.value) / 100; draw(); });
-
-    function close() { document.body.removeChild(overlay); }
-    cancel.addEventListener('click', close);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-    ok.addEventListener('click', function () {
-      // render 256x256 circular JPEG on dark circle (JPEG has no alpha)
-      var out = document.createElement('canvas');
-      out.width = 256; out.height = 256;
-      var octx = out.getContext('2d');
-      octx.fillStyle = '#1e2433'; octx.fillRect(0, 0, 256, 256);
-      var s = baseScale * scale;
-      var k = 256 / canvas.width; // rescale offsets from 320 canvas to 256 output
-      octx.save();
-      octx.beginPath(); octx.arc(128, 128, 128, 0, Math.PI * 2); octx.clip();
-      octx.drawImage(img, 128 - (img.width * s) / 2 + ox * k, 128 - (img.height * s) / 2 + oy * k,
-        img.width * s, img.height * s);
-      octx.restore();
-      close();
-      onDone(out.toDataURL('image/jpeg', 0.85));
-    });
   }
 
   // ---------------- builder form ----------------
@@ -257,38 +179,6 @@
       tplRow.appendChild(b);
     });
 
-    var avWrap = el('div', 'ca-avatar-wrap');
-    var avPrev = document.createElement('img');
-    avPrev.className = 'ca-avatar-preview';
-    var startAv = editing && existing.hasAvatarUpload ? avatarUrlFor(existing) : null;
-    if (startAv) avPrev.src = startAv;
-    else avPrev.style.display = 'none';
-    var avState = { dataUrl: null, keep: !!startAv, removed: false };
-    var fileI = document.createElement('input');
-    fileI.type = 'file'; fileI.accept = 'image/*';
-    fileI.addEventListener('change', function () {
-      var f = fileI.files && fileI.files[0];
-      if (!f) return;
-      var rd = new FileReader();
-      rd.onload = function () {
-        openCropper(rd.result, function (dataUrl) {
-          avState.dataUrl = dataUrl; avState.keep = false; avState.removed = false;
-          avPrev.src = dataUrl; avPrev.style.display = '';
-        });
-      };
-      rd.readAsDataURL(f);
-      fileI.value = '';
-    });
-    var rmBtn = el('button', 'ca-btn ca-btn-ghost', 'Remove');
-    rmBtn.type = 'button';
-    rmBtn.addEventListener('click', function () {
-      avState.dataUrl = null; avState.keep = false; avState.removed = true;
-      avPrev.style.display = 'none'; avPrev.removeAttribute('src');
-    });
-    var avBtns = el('div', 'ca-avatar-btns');
-    avBtns.appendChild(fileI); avBtns.appendChild(rmBtn);
-    avWrap.appendChild(avPrev); avWrap.appendChild(avBtns);
-
     var err = el('div', 'ca-error'); err.style.display = 'none';
     var saveBtn = el('button', 'ca-btn ca-btn-primary', editing ? 'Save changes' : 'Create agent');
     var cancelBtn = el('button', 'ca-btn', 'Cancel');
@@ -304,7 +194,6 @@
     var pw = field('Prompt (optional)', promptT, 'Extra behavior instructions, up to 4000 characters.');
     form.appendChild(pw);
     form.appendChild(tplRow);
-    form.appendChild(field('Avatar (optional)', avWrap, 'Upload → drag/zoom to crop. 256×256 circular.'));
     form.appendChild(err);
     form.appendChild(btnRow);
 
@@ -322,14 +211,14 @@
       if (!payload.name) return showError('Name is required.');
       if (!payload.number) return showError('Number is required.');
       if (!payload.role) return showError('Role is required.');
-      if (avState.dataUrl) payload.avatar = { kind: 'upload', dataUrl: avState.dataUrl };
-      else if (avState.removed) payload.avatar = { kind: 'default' };
-      // else: omit avatar entirely -> server keeps the existing one
       saveBtn.disabled = true;
       var p = editing
         ? api(API + '/' + encodeURIComponent(existing.id), 'PUT', payload)
         : api(API, 'POST', payload);
-      p.then(function (j) { onSaved(j.agent); })
+      p.then(function (j) {
+        notifyChanged(editing ? 'updated' : 'created', j.agent && j.agent.id);
+        onSaved(j.agent);
+      })
         .catch(function (e) { showError(e.message); saveBtn.disabled = false; });
     });
     cancelBtn.addEventListener('click', onCancel);
@@ -387,10 +276,9 @@
       }).catch(function (e) { alert('Clone failed: ' + e.message); });
     });
 
+    // v7.5: avatar upload removed — every custom agent shows the default
+    // phone-caller avatar.
     function avatarFor(a) {
-      if (a.hasAvatarUpload && avatarUrlFor(a)) {
-        return '<img class="ca-row-avatar" src="' + esc(avatarUrlFor(a)) + '" alt="">';
-      }
       return '<span class="ca-row-avatar ca-row-avatar-default"></span>';
     }
 
@@ -416,7 +304,10 @@
         bEdit.addEventListener('click', function () { openForm(a); });
         bDel.addEventListener('click', function () {
           if (!confirm('Delete "' + a.name + '"?')) return;
-          api(API + '/' + encodeURIComponent(a.id), 'DELETE').then(refresh).catch(function (e) {
+          api(API + '/' + encodeURIComponent(a.id), 'DELETE').then(function () {
+            notifyChanged('deleted', a.id);
+            refresh();
+          }).catch(function (e) {
             alert('Delete failed: ' + e.message);
           });
         });
@@ -429,8 +320,7 @@
       formHost.innerHTML = '';
       var seed = existing || (draft ? {
         name: draft.name, number: draft.number, role: draft.role,
-        tone: draft.tone, voice: draft.voice, prompt: draft.prompt,
-        hasAvatarUpload: false
+        tone: draft.tone, voice: draft.voice, prompt: draft.prompt
       } : null);
       buildForm(formHost, seed, voices, function () {
         formHost.innerHTML = '';
@@ -461,7 +351,7 @@
     }
   }
 
-  window.CustomAgents = {
+  var CustomAgentsApi = {
     renderPage: renderPage,
     fetchCustomAgents: fetchCustomAgents,
     mergeAgentLists: mergeAgentLists,
@@ -469,4 +359,10 @@
     cloneFrom: cloneFrom,
     PROMPT_TEMPLATES: PROMPT_TEMPLATES
   };
+  // v7.5: guarded exports — browser keeps window.CustomAgents; node tests
+  // can require() this file for the pure merge logic (mergeAgentLists).
+  // DOM-dependent members (renderPage, fetchCustomAgents, cloneFrom) are
+  // browser-only and are never called in node.
+  if (typeof window !== 'undefined') window.CustomAgents = CustomAgentsApi;
+  if (typeof module !== 'undefined' && module.exports) module.exports = CustomAgentsApi;
 })();

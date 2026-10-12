@@ -46,10 +46,11 @@ module.exports = {
     var v = customAgents.validate(Object.assign(valid(), { prompt: 'x'.repeat(4001) }));
     assert.ok(!v.ok && /prompt/i.test(v.error));
   },
-  'validate: oversize avatar rejected': function () {
+  'validate: avatar input is ignored (v7.5 removal)': function () {
     var big = 'data:image/jpeg;base64,' + 'A'.repeat(600 * 1024);
     var v = customAgents.validate(Object.assign(valid(), { avatar: { kind: 'upload', dataUrl: big } }));
-    assert.ok(!v.ok && /avatar/i.test(v.error));
+    assert.ok(v.ok, 'avatar input must not fail validation, got: ' + v.error);
+    assert.strictEqual(v.value.avatar, undefined, 'avatar is stripped from the cleaned record');
   },
   'validate: unknown voice rejected': function () {
     var v = customAgents.validate(Object.assign(valid(), { voice: 'NotAVoice' }));
@@ -143,10 +144,12 @@ module.exports = {
     assert.strictEqual(a.avatarUrl, null, 'no avatar -> null url');
     assert.strictEqual(a.hasAvatarUpload, false);
   },
-  'toAgent sets avatarUrl when upload present': function () {
+  'toAgent ignores legacy avatar field — default avatar always': function () {
+    // A record written before v7.5 may still carry avatar:{kind:'upload'};
+    // reads stay harmless: no upload, no avatar URL, default avatar.
     var a = customAgents.toAgent(Object.assign({ id: 'custom_abcdef12' }, valid(), { avatar: { kind: 'upload' } }));
-    assert.strictEqual(a.hasAvatarUpload, true);
-    assert.strictEqual(a.avatarUrl, '/api/v7/custom-agents/custom_abcdef12/avatar');
+    assert.strictEqual(a.hasAvatarUpload, false);
+    assert.strictEqual(a.avatarUrl, null);
   },
   'findTarget by id and by number': async function () {
     var s = freshStore();
@@ -194,7 +197,7 @@ module.exports = {
     });
     assert.strictEqual(await h({ method: 'GET', url: '/api/agents', headers: {} }, {}), false);
   },
-  'API: full CRUD via mount incl. avatar write+serve': async function () {
+  'API: full CRUD via mount — avatar input ignored, no avatar files': async function () {
     var dir = tmpDir();
     var reqQ = [];
     var h = apiv7custom.mount(null, {
@@ -218,13 +221,16 @@ module.exports = {
     assert.strictEqual(post._code, 201);
     var id = post._obj.agent.id;
     assert.ok(/^custom_[0-9a-f]{8}$/.test(id));
-    assert.strictEqual(post._obj.agent.hasAvatarUpload, true);
-    assert.ok(fs.existsSync(path.join(dir, 'avatars_custom', id + '.jpg')), 'avatar jpg written');
+    assert.strictEqual(post._obj.agent.hasAvatarUpload, false, 'no avatar uploads in v7.5');
+    assert.strictEqual(post._obj.agent.avatarUrl, null);
+    assert.ok(!fs.existsSync(path.join(dir, 'avatars_custom')), 'no avatar storage dir created');
     var l1 = await req('GET', '/api/v7/custom-agents');
     assert.strictEqual(l1._obj.agents.length, 1);
     var put = await req('PUT', '/api/v7/custom-agents/' + id, Object.assign(valid(), { name: 'Edited' }));
     assert.strictEqual(put._obj.agent.name, 'Edited');
-    assert.strictEqual(put._obj.agent.hasAvatarUpload, true, 'upload kept when avatar omitted');
+    assert.strictEqual(put._obj.agent.hasAvatarUpload, false);
+    var avHandled = await h({ method: 'GET', url: '/api/v7/custom-agents/' + id + '/avatar', headers: { 'x-key-hash': KEY_A } }, {});
+    assert.strictEqual(avHandled, false, 'avatar route removed (falls through unhandled)');
     var clone = await req('POST', '/api/v7/custom-agents/clone', { sourceId: 'lina' });
     assert.strictEqual(clone._obj.draft.name, 'Elena');
     var clone2 = await req('POST', '/api/v7/custom-agents/clone', { sourceId: id });
@@ -232,7 +238,6 @@ module.exports = {
     assert.ok(/cannot be cloned/i.test(clone2._obj.error));
     var del = await req('DELETE', '/api/v7/custom-agents/' + id);
     assert.deepStrictEqual(del._obj, { ok: true });
-    assert.ok(!fs.existsSync(path.join(dir, 'avatars_custom', id + '.jpg')), 'avatar removed with agent');
     var notfound = await req('GET', '/api/v7/custom-agents/' + id);
     assert.strictEqual(notfound._code, 404);
   },

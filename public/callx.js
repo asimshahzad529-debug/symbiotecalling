@@ -403,21 +403,58 @@ var CallX = {};
    * ------------------------------------------------------------------ */
   var RECENTS_KEY = 'callx_recents_v1';
   var RECENTS_CAP = 20;
+  var KEYHASH_RE = /^[0-9a-f]{64}$/;
   var recents = {
     _store: null, // test seam: inject a localStorage-like object
+    _scope: null, // test seam: active keyHash; null = legacy shared partition
     _s: function () { return recents._store || storage; },
+    /** Storage key for the current scope: one partition per API key, so a
+     *  custom agent (or any call) made under key 1 never shows in the
+     *  dialer recents under key 2. Null scope keeps the legacy shared key
+     *  (pre-v7.5 behavior). */
+    _key: function () {
+      return recents._scope ? RECENTS_KEY + '_' + recents._scope : RECENTS_KEY;
+    },
+    /**
+     * setScope(keyHash) — v7.5 per-key isolation for dialer recents.
+     * keyHash must be a 64-char hex hash (or null/'' for the legacy shared
+     * partition); anything else throws. One-time migration: entries written
+     * before scoping existed move into the first scoped partition, but only
+     * when that partition is empty — never merged into (or over) another
+     * key's recents. Returns the new scope.
+     */
+    setScope: function (keyHash) {
+      var kh = (keyHash == null || keyHash === '') ? null : String(keyHash);
+      if (kh !== null && !KEYHASH_RE.test(kh)) throw new Error('setScope: keyHash must be 64 hex chars');
+      var s = recents._s();
+      var prev = recents._scope;
+      recents._scope = kh;
+      if (s && prev === null && kh !== null) {
+        try {
+          var legacy = s.getItem(RECENTS_KEY);
+          var scoped = s.getItem(recents._key());
+          if (legacy && !scoped) {
+            s.setItem(recents._key(), legacy);
+            s.removeItem(RECENTS_KEY);
+          }
+        } catch (e) { /* migration is best-effort */ }
+      }
+      return recents._scope;
+    },
+    /** Current scope (keyHash or null). */
+    scope: function () { return recents._scope; },
     _read: function () {
       var s = recents._s();
       if (!s) return [];
       try {
-        var arr = JSON.parse(s.getItem(RECENTS_KEY) || '[]');
+        var arr = JSON.parse(s.getItem(recents._key()) || '[]');
         return Array.isArray(arr) ? arr : [];
       } catch (e) { return []; }
     },
     _write: function (arr) {
       var s = recents._s();
       if (!s) return;
-      try { s.setItem(RECENTS_KEY, JSON.stringify(arr)); } catch (e) {}
+      try { s.setItem(recents._key(), JSON.stringify(arr)); } catch (e) {}
     },
     /** push({name, number, agentId}) — most-recent first, dedup by number,
      *  favorites preserved across re-dials. Returns the stored entry. */

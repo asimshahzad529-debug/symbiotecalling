@@ -229,7 +229,15 @@ function mount(api, ctx) {
   router.route('GET', '/api/v7/audit', function (req, res) {
     var kh = needCallerKey(req, res);
     if (!kh) return;
-    try { sendJson(res, 200, { entries: keystore.auditList(100) }); }
+    try {
+      // v7.5 per-key isolation: the audit log is one device-local file, so
+      // entries are filtered to the caller's own key — one key must never
+      // see another key's call/login events. Read the full cap first so a
+      // busy sibling key can't push this key's entries out of the window.
+      var all = keystore.auditList(keystoreMod.MAX_AUDIT_ENTRIES);
+      var mine = all.filter(function (e) { return e && e.keyHash === kh; });
+      sendJson(res, 200, { entries: mine.slice(0, 100) });
+    }
     catch (e) { sendJson(res, 500, { error: 'read failed' }); }
   });
 

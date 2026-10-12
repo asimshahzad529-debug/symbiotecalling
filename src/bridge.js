@@ -106,7 +106,20 @@ Bridge.prototype.resolveAgent = function (msg) {
     return rec ? customAgents.toAgent(rec) : null;
   }
   if (msg.agentId && typeof msg.agentId === 'string') return agents.getById(msg.agentId);
-  if (msg.number && typeof msg.number === 'string') return agents.getByNumber(msg.number);
+  if (msg.number && typeof msg.number === 'string') {
+    var builtin = agents.getByNumber(msg.number);
+    if (builtin) return builtin;
+    // v7.5: custom agents of the ACTIVE key are dialable by their number too.
+    // Resolution stays inside the caller's per-key partition (this.keyHash),
+    // so one key's custom numbers can never be reached from another key.
+    if (this.customStore && this.keyHash) {
+      try {
+        var custom = customAgents.findTarget(this.customStore, this.keyHash, msg.number);
+        if (custom) return custom;
+      } catch (e) { /* fall through to not-in-service */ }
+    }
+    return null;
+  }
   return null;
 };
 
@@ -212,6 +225,19 @@ Bridge.prototype.onEvent = function (ev) {
     if (this.memory) {
       this._memP = this.memory.beginCall(Object.assign({ keyHash: this.keyHash }, info))
         .then(function (id) { self2.memId = id; return id; }).catch(function () { return null; });
+    }
+    // v7.5: link the history call id (call_...) onto the memory entry
+    // (mem_...) so the Memory page can offer the device recording download
+    // for the same call. Non-fatal — never blocks the call.
+    if (this.memory) {
+      var memPL = this._memP, memoryL = this.memory;
+      this._logStartP.then(function (callId) {
+        if (!callId || !memPL) return null;
+        return memPL.then(function (memId) {
+          if (memId && memoryL) return memoryL.setCallId(memId, callId);
+          return null;
+        });
+      }).catch(function () {});
     }
     ev.agent = publicAgent(this.agent);
   }

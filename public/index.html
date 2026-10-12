@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Symbiote Calling — AI calling agents</title>
+<link rel="icon" type="image/jpeg" href="/avatars/symagent.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -21,7 +22,6 @@
     <button data-view="customagents" type="button">Custom Agents</button>
     <button data-view="dashboard" type="button">Dashboard</button>
     <button data-view="dialer" type="button">Dialer</button>
-    <button data-view="history" type="button">History</button>
     <button data-view="memory" type="button">Memory</button>
     <a class="tab-link" href="docs.html">Docs</a>
     <button data-view="settings" type="button">Settings</button>
@@ -70,28 +70,9 @@
     </div>
   </section>
 
-  <section class="view" id="view-history">
-    <div class="view-head">
-      <div><h1>Call history</h1><p class="dim">Stored on this machine only — agent, number, time, duration.</p></div>
-      <button class="btn ghost" id="clearHistory" type="button">Clear history</button>
-    </div>
-    <div class="hist-filters" id="histFilters">
-      <select id="histFilterAgent" aria-label="Filter by agent"><option value="any">All agents</option></select>
-      <input id="histFilterFrom" type="date" aria-label="From date">
-      <input id="histFilterTo" type="date" aria-label="To date">
-      <select id="histFilterStatus" aria-label="Filter by status">
-        <option value="any">All calls</option>
-        <option value="completed">Completed</option>
-        <option value="missed">Missed</option>
-      </select>
-    </div>
-    <div id="histDetail" class="hidden"></div>
-    <div class="list" id="historyList"></div>
-  </section>
-
   <section class="view" id="view-memory">
     <div class="view-head">
-      <div><h1>Memory</h1><p class="dim">What your agents remember — notes, appointments, and full transcripts, per call.</p></div>
+      <div><h1>Memory</h1><p class="dim">What your agents remember — an AI-written summary of every call.</p></div>
       <div class="mem-actions">
         <button class="btn ghost" id="backupMemories" type="button">Download backup</button>
         <button class="btn ghost" id="restoreMemories" type="button">Restore</button>
@@ -118,31 +99,6 @@
       <h3>Accent color</h3>
       <p class="dim">Pick the theme accent used across the app.</p>
       <div class="accent-row" id="accentRow"></div>
-    </div>
-    <div class="card">
-      <h3>Data retention</h3>
-      <p class="dim">Device recordings and server call records older than this are deleted automatically.</p>
-      <label class="lbl">Keep data for
-        <span class="ret-row"><input id="retentionDays" type="number" min="1" max="3650" step="1" style="width:5.5em"> <span class="dim">days</span></span>
-      </label>
-    </div>
-    <div class="card">
-      <h3>Call preferences</h3>
-      <label class="lbl">Model
-        <input id="modelInput" type="text" value="gemini-3.8-live" list="modelList" spellcheck="false">
-        <datalist id="modelList">
-          <option value="gemini-3.8-live"></option>
-          <option value="gemini-3.1-flash-live-preview"></option>
-          <option value="gemini-3.8-live-extended-thinking"></option>
-        </datalist>
-      </label>
-      <label class="check"><input id="micDefault" type="checkbox" checked> <span>Microphone on for calls <span class="dim">(permission is only requested when a call starts)</span></span></label>
-      <label class="check"><input id="themeDefault" type="checkbox"> <span>Dark mode <span class="dim">(warm light theme is the default)</span></span></label>
-    </div>
-    <div class="card">
-      <h3>About</h3>
-      <p class="dim">Symbiote Calling is a local demo. Agent numbers are fictional (+1 555…) and work only inside this app. Not a real phone network, emergency service, medical, legal, or financial provider.</p>
-      <details class="diag"><summary class="mono dim">Session diagnostics</summary><pre id="diagBox" class="mono">No active call</pre></details>
     </div>
   </section>
 </main>
@@ -209,6 +165,7 @@
 <script src="recorder.js"></script>
 <script src="summary.js"></script>
 <script src="keygate.js"></script>
+<script src="custom-events.js"></script>
 <script src="custom-agents.js"></script>
 <script src="directory.js"></script>
 <script src="callx.js"></script>

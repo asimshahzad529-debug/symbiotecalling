@@ -1,4 +1,4 @@
-# Symbiote Calling — v7.0.0
+# Symbiote Calling — v7.5.0
 
 Dial 101 AI calling agents from a phone-style UI, powered by Gemini Live — or build your own. Each agent has its own fictional number; pick from the directory, punch it into the dialer, and a phone UI opens with a live voice call, timer, keypad, and chat. Agents remember you: every call saves notes, appointments, and a transcript to the Memory page, and agents recall past calls when you ring again.
 
@@ -12,21 +12,36 @@ npm run dev
 ```
 
 1. Open http://localhost:3000 — the **login screen** appears first. Paste your Gemini API key ([Google AI Studio](https://aistudio.google.com/apikey)) and give it a label. The key stays on this device (localStorage) — only its SHA-256 hash ever leaves it. You can keep several key profiles and switch between them in **Settings → Key profiles**.
-2. **Agents** tab → search, filter by gender/role, tap a card for the agent's profile (per-agent call stats), swipe right or tap Call — e.g. Elena `+1 (555) 010-0003`.
+2. **Agents** tab → search by name/number/niche, tap a card for the agent's profile (per-agent call stats), swipe right or tap Call — e.g. Elena `+1 (555) 010-0003`.
 3. Or open the **Dialer**, punch in a number, hit call — recent numbers show below the pad.
 4. The phone UI opens: *Dialing… → Connecting… → greeting… → live timer (mm:ss)*, mute, keypad (real DTMF tones), chat (type → agent answers by voice), in-call notes, minimize-to-bubble, hang up. Say "cut the call" / "khuda hafiz" and the agent says goodbye and hangs up itself.
-5. **History** tab logs every call — filter by agent, date range, or completed/missed.
-6. **Memory** tab: every call is saved with the agent's notes (appointments, facts) and the full transcript; download any transcript as a text file. Call the same agent again and it remembers your past calls.
+5. **Memory** tab: every call is saved with the agent's AI-written summary; open any entry to read it, or download the transcript / device recording from the same view. Call the same agent again and it remembers your past calls.
 7. **Dashboard** tab: usage stats for your current key, plus one-tap recent calls.
 8. **Docs** tab: the full user guide (also at `/docs.html`).
 
-> Mic permission is requested only when a call starts (toggleable in Settings). If the mic is unavailable, the call continues in chat mode — the agent still answers by voice.
+> Mic permission is requested only when a call starts. If the mic is unavailable, the call continues in chat mode — the agent still answers by voice.
+
+## What's new in v7.5.0 (fixing release — no new features)
+
+**📇 Greeting mask.** The call overlay now shows "Connecting…" until the *first greeting audio frame* arrives, then reveals the live call UI — so the greeting feels instant even though the model needs a few seconds to warm up. Hard cap ~7s: reveals anyway with the "Say hello to begin" hint. Mic gating and handshake diagnostics unchanged.
+
+**🔒 Per-key isolation hardened.** Fixed two real leaks: dialer recents and the audit log could expose one key's data under another key. Every surface (directory, dialer, stats, recents, SymAgent directory, transfer targets) is now strictly scoped to the active key.
+
+**⚡ Instant custom agents.** New/edited custom agents appear in the Agents list and dialer immediately — no reload.
+
+**🎨 Theme fixes.** The Custom Agents page and New Agent form now follow the app theme (dark/light) instead of hardcoded white.
+
+**➖ Removals.** Profile-picture upload removed from the builder (default caller avatar for all custom agents); gender/role dropdowns removed from the Agents page; the History page is gone (recording + transcript downloads moved onto each Memory entry); Memory entries show only the AI-written summary; Settings keeps just Key profiles + Accent colour.
+
+**📖 Docs.** Wrapping/flow fixes and a full proofread.
+
+**🖼️ Favicon.** The site icon is now SymAgent's avatar.
 
 ## What's new in v7.0.0
 
 **🔑 Key login (the whole app is gated).** Your API key is your login — the app won't render until a key is active. Keys live in localStorage only; REST calls carry only the key's hash (`x-key-hash`). Manage multiple profiles (labels, switch, delete) from Settings. Switching keys switches your entire world: each key gets its own history, memories, custom agents, usage stats, and audit log — nothing is ever wiped or leaked between keys.
 
-**🧑‍💼 Custom agent builder.** The **Custom Agents** tab lets you build unlimited voice agents: name (required), number (required — any number), role (required, anything you like), tone (professional / friendly / confident / casual), voice, prompt (optional), and an optional profile photo (default caller avatar if skipped). Saved per API key — your agents load whenever that key does. Custom agents dial, talk, remember, and appear everywhere built-ins do (directory, dialer, history, stats). Clone any built-in agent from its profile sheet to pre-fill the builder. SymAgent knows all your custom agents and can transfer callers to them.
+**🧑‍💼 Custom agent builder.** The **Custom Agents** tab lets you build unlimited voice agents: name (required), number (required — any number), role (required, anything you like), tone (professional / friendly / confident / casual), voice, prompt (optional). All custom agents use the default caller avatar. Saved per API key — your agents load whenever that key does. Custom agents dial, talk, remember, and appear everywhere built-ins do (directory, dialer, history, stats). Clone any built-in agent from its profile sheet to pre-fill the builder. SymAgent knows all your custom agents and can transfer callers to them.
 
 **🎙️ Greeting fix (P0).** The reported bug — no agent ever greeting first — gets a proper handshake: one trigger on setup confirmation, a single ~6s retry, a ~12s failure path that shows *"Say hello to begin"*, and client-side diagnostics (`window.GreetingDiag`) feeding the call overlay (*greeting…* → timer / transcript bubble / hint). See "Verified / not verified" below.
 
@@ -34,7 +49,7 @@ npm run dev
 
 **📞 Call experience.** In-call **notes** (saved to the call record on hangup), **floating call bubble** (minimize the phone UI, keep talking), **connection meter** (mic level + network state), **quota timer alerts** (visual + beep when a per-call budget is crossed), **dialer recents**, and **transcript download** (`.txt`) from any memory.
 
-**🧹 Hygiene.** Auto-cleanup: device recordings + server call records + memory transcripts older than N days are deleted automatically (N configurable in Settings, default 30; server reads `RETENTION_DAYS` env). **Accent color picker** in Settings recolors the whole app (including the key-login overlay). **History filters** (agent / date range / completed-missed).
+**🧹 Hygiene.** Auto-cleanup: device recordings + server call records older than N days are deleted automatically (server reads `RETENTION_DAYS` env, default 30). **Accent color picker** in Settings recolors the whole app (including the key-login overlay).
 
 **🛡️ Rate limiting, usage & audit.** Max 3 concurrent calls per key (extra callers get a clean "too many concurrent calls" message); per-key call/minute usage at `GET /api/v7/key/usage`; a server-side audit log at `GET /api/v7/audit`.
 
