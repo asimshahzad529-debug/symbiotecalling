@@ -56,6 +56,15 @@ function buildAgentInstruction(agent, recallText) {
   );
   if (agent.id === 'symagent') {
     lines.push('- share_links: use when the caller asks for socials, website, portfolio, or contact details. Call it with the right set ("socials", "portfolio", "contact", or "all") AND mention the key links briefly in speech.');
+    lines.push('- transfer_call: transfer the caller to a specialist agent mid-call. Use ONLY after the caller agreed to the transfer. Pass the agent id (or the full number) you confirmed with the caller.');
+    lines.push(
+      '',
+      'TRANSFERRING TO A SPECIALIST',
+      '- When the caller asks about a service or niche a specialist agent covers, name the matching specialist from the agent directory and confirm FIRST: "Should I connect you to <name>?"',
+      '- Transfer only after the caller says yes. Then say ONE brief handoff sentence (e.g. "<name>, a <niche>, is joining — connecting you now."), then call transfer_call with the agent id (or the full number), and say nothing more.',
+      '- Never transfer to yourself. Never guess which specialist to use — if you are unsure, ask the caller what they need.',
+      ''
+    );
   }
   lines.push(
     '',

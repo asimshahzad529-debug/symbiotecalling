@@ -1,4 +1,4 @@
-# Symbiote Calling
+# Symbiote Calling — v6.0.0
 
 Dial 101 AI calling agents from a phone-style UI, powered by Gemini Live. Each agent has its own fictional number — pick from the directory or punch it into the dialer, and a phone UI opens with a live voice call, timer, keypad, and chat. Agents remember you: every call saves notes, appointments, and a transcript to the Memory page, and agents recall past calls when you ring again.
 
@@ -80,6 +80,21 @@ Sensitive roles carry hard limits in their prompts: Harper never diagnoses, Omar
 - **Light/dark themes**: warm light default (easy on the eyes), one-tap dark mode, remembered.
 - **In-call chat** with a close button; **DTMF keypad** with real tones (tones never reach the model).
 - **Call history** with durations and one-tap call-back.
+- **Dashboard**: the home screen shows live stats — total calls, minutes talked, leads captured, and your top 5 most-called agents.
+- **Call transfer (SymAgent only)**: ask SymAgent about a specialist service and it offers to connect you — say yes and it transfers you straight into a call with that agent.
+- **Call recording**: every call is recorded on your device (agent + your mic mixed). A red dot shows it's recording; after hangup, download or delete the audio from the call's detail view. Recordings never leave your device.
+- **Auto call summaries**: after each call, a short AI summary (3–4 lines + outcome) is generated and saved with the call record and memory — free, fire-and-forget, never blocks the call.
+- **Persistent memory**: set `DATA_DIR` to keep call history and memories across redeploys (e.g. a Railway volume), plus one-click **Download backup (JSON)** / **Restore from backup** on the Memory page.
+
+## Persistent data on hosting (Railway)
+
+By default history and memories live in `./data` — on Railway the filesystem is wiped on every redeploy, so set a persistent volume:
+
+1. Railway dashboard → your service → **Volumes** → **Add volume**, mount path `/data`.
+2. Same service → **Variables** → add `DATA_DIR=/data`.
+3. Redeploy. History and memories now survive updates.
+
+Tip: before any big change, use **Memory → Download backup (JSON)** to keep a local copy; **Restore from backup** puts it back.
 
 ## How it works
 
@@ -103,7 +118,7 @@ browser ──WS /live──▶ localhost server ──SDK──▶ Google Gemin
 npm test
 ```
 
-50 tests, zero dependencies: agent directory (101 unique fictional numbers, gender↔voice mapping, voice-identity prompt lines, safety prompts, no prompt/knowledge leakage), SymAgent (company knowledge, 100-agent directory, share_links emits official URLs only), history logging, memory store (lifecycle, recall, key-scoped wipe, key never stored), the search provider chain (stubbed, no network), the dial/call protocol against a fake SDK (number resolution, NO_SUCH_NUMBER / NO_KEY, single greeting, watchdog nudge, chat turn-completion, DTMF isolation, save_note → memory, end_call → agent hangup, recall injection, key-change reset), and the audio resampler.
+105 tests, zero dependencies: agent directory (101 unique fictional numbers, gender↔voice mapping, voice-identity prompt lines, safety prompts, no prompt/knowledge leakage), SymAgent (company knowledge, 100-agent directory, share_links emits official URLs only), history logging, memory store (lifecycle, recall, key-scoped wipe, key never stored), the search provider chain (stubbed, no network), the dial/call protocol against a fake SDK (number resolution, NO_SUCH_NUMBER / NO_KEY, single greeting, watchdog nudge, chat turn-completion, DTMF isolation, save_note → memory, end_call → agent hangup, recall injection, key-change reset), the audio resampler, transfer_call (SymAgent-gated tool, id/number resolution, self/unknown rejection, bridge transfer + call_id events, prompt section), persistence (DATA_DIR isolation, importAll replace, setSummary), stats aggregation (totals, top-5, SymAgent lead count), the call recorder state machine (stubbed MediaRecorder; real audio capture is browser-only), the summary module (prompt shape, null-safe skip behavior, key never in URL), and live HTTP integration for /api/stats, /api/restore and the summary endpoint (real server on a test port).
 
 ## Verified / not verified
 

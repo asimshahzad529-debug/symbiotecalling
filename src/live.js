@@ -18,6 +18,7 @@
 
 var prompt = require('./prompt');
 var search = require('./search');
+var agents = require('./agents');
 
 var BACKOFFS = [5000, 10000, 20000, 40000];
 
@@ -62,6 +63,20 @@ function toolDeclarations(Type, agentId) {
       }
     });
   }
+  // SymAgent only: transfer the caller to a specialist agent mid-call.
+  if (agentId === 'symagent') {
+    decls.push({
+      name: 'transfer_call',
+      description: 'Transfer the caller to a specialist agent mid-call. Call ONLY after you have said your one brief handoff sentence. Pass the agent id or the full phone number of the specialist.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          agentId: { type: Type.STRING, description: 'Specialist agent id (e.g. "lina")' },
+          number: { type: Type.STRING, description: 'Specialist agent phone number, e.g. "+1 (555) 010-0003"' }
+        }
+      }
+    });
+  }
   return decls;
 }
 
@@ -88,6 +103,28 @@ var LINK_SETS = {
 function linksForSet(set) {
   if (set === 'all') return LINK_SETS.socials.concat(LINK_SETS.portfolio, LINK_SETS.contact);
   return LINK_SETS[set] || null;
+}
+
+/**
+ * Resolve a transfer_call target to a public agent record.
+ * Returns { ok:true, target:{id,name,number,niche} } or { ok:false, error }.
+ * Rejects: missing/empty args, unknown agent id or number, self-transfer.
+ */
+function resolveTransferTarget(args) {
+  if (!args || typeof args !== 'object') return { ok: false, error: 'missing arguments: pass agentId or number' };
+  var id = args.agentId ? String(args.agentId).trim() : '';
+  var number = args.number ? String(args.number).trim() : '';
+  if (!id && !number) return { ok: false, error: 'missing arguments: pass agentId or number' };
+  var target = id ? agents.getById(id) : agents.getByNumber(number);
+  if (!target) return { ok: false, error: id ? 'unknown agent id: ' + id.slice(0, 40) : 'unknown number: ' + number.slice(0, 40) };
+  if (target.id === 'symagent') return { ok: false, error: 'cannot transfer to yourself' };
+  return { ok: true, target: { id: target.id, name: target.name, number: target.number, niche: target.niche } };
+}
+
+/** Tool names available for one agent id (no SDK Type object needed), for gating checks. */
+function toolNamesFor(agentId) {
+  var fakeType = { OBJECT: 'OBJECT', STRING: 'STRING' };
+  return toolDeclarations(fakeType, agentId).map(function (d) { return d.name; });
 }
 
 /**
@@ -362,10 +399,16 @@ async function executeTool(name, args, ctx) {
       emit({ type: 'links_shared', set: args.set, links: links });
       return { ok: true, shared: links.length };
     }
+    if (name === 'transfer_call') {
+      var tr = resolveTransferTarget(args);
+      if (!tr.ok) return { ok: false, error: tr.error };
+      emit({ type: 'transfer_requested', target: tr.target });
+      return { ok: true, transfer: tr.target, note: 'Say one brief handoff sentence, then say nothing more; the transfer is being connected.' };
+    }
     return { ok: false, error: 'unknown tool: ' + name };
   } catch (e) {
     return { ok: false, error: maskError(e) };
   }
 }
 
-module.exports = { createOmniSession: createOmniSession, executeTool: executeTool, BACKOFFS: BACKOFFS };
+module.exports = { createOmniSession: createOmniSession, executeTool: executeTool, BACKOFFS: BACKOFFS, resolveTransferTarget: resolveTransferTarget, toolNamesFor: toolNamesFor };

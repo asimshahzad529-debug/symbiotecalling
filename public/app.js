@@ -39,6 +39,7 @@
     sfx('tap');
     tabs.querySelectorAll('button').forEach(function (x) { x.classList.toggle('active', x === b); });
     document.querySelectorAll('.view').forEach(function (v) { v.classList.toggle('active', v.id === 'view-' + b.dataset.view); });
+    if (b.dataset.view === 'agents') { renderAgents($('agentSearch').value); loadStats(); }
     if (b.dataset.view === 'history') loadHistory();
     if (b.dataset.view === 'memory') loadMemories();
   });
@@ -118,7 +119,54 @@
     if (!g.children.length) g.innerHTML = '<p class="dim">No agents match.</p>';
   }
   $('agentSearch').addEventListener('input', function (e) { renderAgents(e.target.value); });
-  loadAgents();
+  loadAgents().then(function () { loadStats(); }).catch(function () {});
+
+  /* ---------- dashboard ---------- */
+  function el(tag, cls, text) {
+    var d = document.createElement(tag);
+    if (cls) d.className = cls;
+    if (text != null) d.textContent = text;
+    return d;
+  }
+  var ICON_CLOCK = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg>';
+  var ICON_LEAD = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><line x1="18" y1="8" x2="18" y2="14"/><line x1="15" y1="11" x2="21" y2="11"/></svg>';
+  var ICON_STAR = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></svg>';
+  async function loadStats() {
+    var row = $('statsRow'); if (!row) return;
+    var s = null;
+    try { s = (await (await fetch('api/stats')).json()).stats; } catch (e) { return; }
+    if (!s) return;
+    row.classList.remove('stats');
+    row.innerHTML = '';
+    var grid = el('div', 'stats');
+    [['calls', ICON_PHONE, s.totalCalls, 'Calls'],
+     ['mins', ICON_CLOCK, s.totalMinutes, 'Minutes'],
+     ['leads', ICON_LEAD, s.leadsCaptured, 'Leads'],
+     ['top', ICON_STAR, (s.topAgents || []).length, 'Top agents']].forEach(function (c) {
+      var card = el('div', 'stat-card');
+      var ic = el('div', 'stat-ic'); ic.innerHTML = c[1];
+      var tx = el('div');
+      tx.appendChild(el('div', 'stat-num', String(c[2] == null ? 0 : c[2])));
+      tx.appendChild(el('div', 'stat-lbl', c[3]));
+      card.appendChild(ic); card.appendChild(tx); grid.appendChild(card);
+    });
+    row.appendChild(grid);
+    if ((s.topAgents || []).length) {
+      var t5 = el('div', 'top5');
+      t5.appendChild(el('h4', null, 'Most called'));
+      s.topAgents.forEach(function (t, i) {
+        var r = el('div', 'top5-row');
+        var match = AGENTS.filter(function (x) { return x.id === t.agentId; })[0];
+        var av = el('div', 'avatar');
+        av.innerHTML = avatarHTML({ id: t.agentId || '?', color: match ? match.color : '#666' });
+        r.appendChild(av);
+        r.appendChild(el('div', 't-name', (i + 1) + '. ' + (t.agentName || 'Unknown')));
+        r.appendChild(el('div', 't-meta mono', t.calls + ' calls · ' + t.minutes + ' min'));
+        t5.appendChild(r);
+      });
+      row.appendChild(t5);
+    }
+  }
 
   /* ---------- dialer ---------- */
   var DIAL_KEYS = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'], ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'], ['*', ''], ['0', '+'], ['#', '']];
@@ -209,7 +257,9 @@
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   async function loadHistory() {
-    var list = $('historyList'); list.innerHTML = '';
+    var list = $('historyList'), detail = $('histDetail');
+    detail.classList.add('hidden'); detail.innerHTML = '';
+    list.innerHTML = '';
     try {
       var r = await fetch('api/history'); var j = await r.json();
       var calls = (j.calls || []).slice().reverse();
@@ -225,8 +275,10 @@
         d.querySelectorAll('.mono')[1].textContent = fmtDur(c.durationSec);
         var b = document.createElement('button'); b.className = 'btn ghost'; b.type = 'button';
         b.innerHTML = ICON_PHONE; b.title = 'Call again'; b.setAttribute('aria-label', 'Call again');
-        b.onclick = function () { startCall({ agentId: c.agentId }); };
+        b.onclick = function (e) { e.stopPropagation(); startCall({ agentId: c.agentId }); };
         d.appendChild(b); list.appendChild(d);
+        d.style.cursor = 'pointer';
+        d.onclick = function () { openHistoryDetail(c.id); };
       });
     } catch (e) { list.innerHTML = '<p class="dim">Could not load history.</p>'; }
   }
@@ -234,6 +286,56 @@
     if (!confirm('Clear all call history?')) return;
     await fetch('api/history', { method: 'DELETE' }); loadHistory();
   };
+
+  /* Per-call detail: summary + device recording. */
+  async function openHistoryDetail(id) {
+    var detail = $('histDetail'), list = $('historyList');
+    var calls = [];
+    try { calls = ((await (await fetch('api/history')).json()).calls) || []; } catch (e) { return; }
+    var c = null;
+    for (var i = 0; i < calls.length; i++) if (calls[i].id === id) { c = calls[i]; break; }
+    if (!c) return;
+    var a = AGENTS.find(function (x) { return x.id === c.agentId; });
+    list.innerHTML = '';
+    detail.classList.remove('hidden');
+    detail.innerHTML =
+      '<div class="card mem-detail"><div class="mem-head"><button class="btn ghost" id="histBack" type="button">← Back</button></div>' +
+      '<div class="a-top"><div class="avatar" id="histAvatar"></div><div><div class="a-name" id="histName"></div>' +
+      '<div class="dim tiny" id="histMeta"></div></div></div>' +
+      '<div class="det-sec"><h3>Summary</h3><div class="det-summary" id="histSummary"></div></div>' +
+      '<div class="det-sec"><h3>Recording</h3><p class="dim tiny" id="histRecState">Checking…</p>' +
+      '<div class="det-row-btns"><button class="btn ghost" id="histRecDl" type="button">Download audio</button>' +
+      '<button class="btn ghost danger" id="histRecDel" type="button">Delete recording</button></div></div></div>';
+    $('histAvatar').innerHTML = avatarHTML({ id: c.agentId || '?', color: a ? a.color : '#666' });
+    $('histName').textContent = c.agentName || 'Unknown';
+    $('histMeta').textContent = (c.number || '') + ' · ' + fmtWhen(c.startedAt) + ' · ' + fmtDur(c.durationSec);
+    $('histSummary').textContent = c.summary || 'No summary for this call.';
+    $('histBack').onclick = loadHistory;
+    var dl = $('histRecDl'), del = $('histRecDel'), st = $('histRecState');
+    dl.style.display = 'none'; del.style.display = 'none';
+    idb.get(id).then(function (rec) {
+      if (rec && rec.blob) {
+        st.textContent = 'Recorded on this device — never uploaded.';
+        dl.style.display = ''; del.style.display = '';
+        dl.onclick = function () {
+          var u = URL.createObjectURL(rec.blob);
+          var aEl = document.createElement('a');
+          aEl.href = u; aEl.download = 'call-' + id + '.webm';
+          document.body.appendChild(aEl); aEl.click(); aEl.remove();
+          setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
+        };
+        del.onclick = function () {
+          if (!confirm('Delete this recording?')) return;
+          idb.del(id).then(function () {
+            dl.style.display = 'none'; del.style.display = 'none';
+            st.textContent = 'No recording for this call.';
+          }).catch(function () {});
+        };
+      } else {
+        st.textContent = 'No recording for this call.';
+      }
+    }).catch(function () { st.textContent = 'No recording for this call.'; });
+  }
 
   /* ---------- memory ---------- */
   function memWhen(iso) {
@@ -305,6 +407,44 @@
     if (!confirm('Delete ALL memories?')) return;
     await fetch('api/memories', { method: 'DELETE' }); loadMemories();
   };
+  $('backupMemories').onclick = async function () {
+    sfx('tap');
+    try {
+      var mems = ((await (await fetch('api/memories')).json()).memories) || [];
+      var calls = ((await (await fetch('api/history')).json()).calls) || [];
+      var payload = JSON.stringify({
+        app: 'symbiote-calling', version: '6.0.0',
+        exportedAt: new Date().toISOString(), memories: mems, history: calls
+      }, null, 2);
+      var blob = new Blob([payload], { type: 'application/json' });
+      var u = URL.createObjectURL(blob);
+      var aEl = document.createElement('a');
+      aEl.href = u; aEl.download = 'symbiote-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(aEl); aEl.click(); aEl.remove();
+      setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
+    } catch (e) {}
+  };
+  $('restoreMemories').onclick = function () { $('restoreFile').click(); };
+  $('restoreFile').addEventListener('change', async function (e) {
+    var f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      var data = JSON.parse(await f.text());
+      var badShape = !data || (data.memories === undefined && data.history === undefined) ||
+        (data.memories !== undefined && !Array.isArray(data.memories)) ||
+        (data.history !== undefined && !Array.isArray(data.history));
+      if (badShape) { alert('That file is not a Symbiote backup.'); return; }
+      var n = (data.memories || []).length + (data.history || []).length;
+      if (!confirm('Restore ' + n + ' records? This replaces current memories and history.')) return;
+      var r = await fetch('api/restore', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memories: data.memories, history: data.history })
+      });
+      if (!r.ok) { alert('Restore failed.'); return; }
+      loadMemories();
+      if (document.querySelector('#view-history').classList.contains('active')) loadHistory();
+    } catch (err) { alert('Could not read that file.'); }
+  });
 
   /* ---------- settings ---------- */
   $('keyInput').addEventListener('input', function (e) {
@@ -323,8 +463,99 @@
   }
   clock(); setInterval(clock, 15000);
 
-  /* ---------- call engine ---------- */
+  /* ---------- call recordings (IndexedDB — device only, never uploaded) ---------- */
+  var idb = {
+    _db: null,
+    open: function () {
+      var self = this;
+      if (self._db) return Promise.resolve(self._db);
+      return new Promise(function (resolve, reject) {
+        try {
+          var rq = indexedDB.open('symbiote-calling', 1);
+          rq.onupgradeneeded = function () { rq.result.createObjectStore('recordings', { keyPath: 'callId' }); };
+          rq.onsuccess = function () { self._db = rq.result; resolve(self._db); };
+          rq.onerror = function () { reject(rq.error || new Error('idb open failed')); };
+        } catch (e) { reject(e); }
+      });
+    },
+    _tx: function (mode, fn) {
+      return this.open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          try {
+            var tx = db.transaction('recordings', mode);
+            var st = tx.objectStore('recordings');
+            var rq = fn(st);
+            rq.onsuccess = function () { resolve(rq.result); };
+            rq.onerror = function () { reject(rq.error || new Error('idb op failed')); };
+          } catch (e) { reject(e); }
+        });
+      });
+    },
+    put: function (rec) { return this._tx('readwrite', function (st) { return st.put(rec); }); },
+    get: function (callId) { return this._tx('readonly', function (st) { return st.get(callId); }); },
+    del: function (callId) { return this._tx('readwrite', function (st) { return st.delete(callId); }); }
+  };
+
+  /* ---------- call recorder (agent audio + mic → webm) ---------- */
+  function recSupported() {
+    try { return typeof CallRecorder !== 'undefined' && CallRecorder.isSupported(); } catch (e) { return false; }
+  }
+  function startRecording() {
+    if (!recSupported() || !playCtx) return;
+    try {
+      recDest = playCtx.createMediaStreamDestination();
+      var tracks = recDest.stream.getAudioTracks().slice();
+      if (micStream) { var mt = micStream.getAudioTracks()[0]; if (mt) tracks.push(mt); }
+      recorder = new CallRecorder();
+      if (recorder.start(new MediaStream(tracks))) {
+        $('pRecTime').textContent = '00:00';
+        $('pRec').classList.remove('hidden');
+      } else { recorder = null; recDest = null; }
+    } catch (e) { recorder = null; recDest = null; }
+  }
+  function recTick() {
+    if (recorder && recorder.getState() === 'recording') {
+      var s = Math.floor(recorder.getElapsedMs() / 1000);
+      var m = Math.floor(s / 60); s %= 60;
+      $('pRecTime').textContent = (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    }
+  }
+  function stopRecording() {
+    try { $('pRec').classList.add('hidden'); } catch (e) {}
+    recDest = null;
+    if (!recorder) return Promise.resolve(null);
+    var r = recorder; recorder = null;
+    try { return r.stop(); } catch (e) { return Promise.resolve(null); }
+  }
+
+  /** Save recording + fire auto-summary once per call. Never throws. */
+  function finishCallArtifacts() {
+    if (artifactsDone) return;
+    artifactsDone = true;
+    var cid = callId, transcript = callTranscript.slice();
+    var aName = callAgent ? callAgent.name : '';
+    stopRecording().then(function (blob) {
+      if (blob && cid) {
+        idb.put({ callId: cid, blob: blob, agentName: aName, startedAt: new Date().toISOString() }).catch(function () {});
+      }
+    }).catch(function () {});
+    try {
+      if (settings.apiKey && transcript.length && typeof CallSummary !== 'undefined') {
+        CallSummary.summarize(settings.apiKey, transcript).then(function (summary) {
+          if (summary && cid) {
+            fetch('api/history/' + encodeURIComponent(cid) + '/summary', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ summary: summary })
+            }).catch(function () {});
+          }
+        }).catch(function () {});
+      }
+    } catch (e) {}
+  }
   var ws = null, callAgent = null, connectedAt = 0, timerInt = null;
+  var callId = null, callToken = 0, artifactsDone = false;
+  var callTranscript = [];
+  var recorder = null, recDest = null;
   var muted = false, micStream = null, audioCtx = null, workletNode = null;
   var playCtx = null, nextPlayTime = 0, activeSources = [];
   // Greeting gate: the mic stays muted until the agent's greeting audio
@@ -380,6 +611,7 @@
     var buf = ctx.createBuffer(1, pcm16.length, rate), ch = buf.getChannelData(0);
     for (var j = 0; j < pcm16.length; j++) ch[j] = pcm16[j] / 32768;
     var src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+    if (recDest) { try { src.connect(recDest); } catch (e) {} }
     var now = ctx.currentTime;
     if (nextPlayTime < now) nextPlayTime = now + 0.02;
     try { src.start(nextPlayTime); } catch (e) { src.start(now); nextPlayTime = now; }
@@ -424,12 +656,15 @@
 
   async function startCall(target) {
     if (ws) return; // one call at a time
+    callToken++;
     // Create the playback context INSIDE the click gesture (autoplay policy).
     try { ensurePlayCtx(); } catch (e) {}
     // reset phone UI
     $('chatLog').innerHTML = '';
     $('keypadSheet').classList.add('hidden'); $('chatSheet').classList.add('hidden');
     $('pMute').classList.remove('on'); muted = false; greetingDone = false;
+    callTranscript = []; callId = null; artifactsDone = false;
+    $('pRec').classList.add('hidden');
     if (greetFallbackT) { clearTimeout(greetFallbackT); greetFallbackT = null; }
     $('pEq').classList.add('hidden');
     $('pAvatar').classList.remove('ring');
@@ -449,7 +684,8 @@
       ws.send(JSON.stringify(setup));
     };
     ws.onmessage = onServer;
-    ws.onclose = function () { endCallUI('Call ended'); };
+    var closeTok = callToken;
+    ws.onclose = function () { if (closeTok === callToken) endCallUI('Call ended'); };
     ws.onerror = function () {};
   }
 
@@ -470,13 +706,21 @@
         sfx('connect');
         setCallState(fmtTimer(), 'live');
         $('pAvatar').classList.add('ring');
-        timerInt = setInterval(function () { setCallState(fmtTimer(), 'live'); }, 1000);
+        timerInt = setInterval(function () { setCallState(fmtTimer(), 'live'); recTick(); }, 1000);
         // Fallback: if the greeting never arrives, open the mic anyway.
         if (greetFallbackT) clearTimeout(greetFallbackT);
         greetFallbackT = setTimeout(ungateMic, 10000);
+        startRecording();
+        break;
+      case 'call_id':
+        if (msg.callId) callId = msg.callId;
+        break;
+      case 'transfer':
+        handleTransfer(msg.target || {});
         break;
       case 'transcript':
         chatBubble(msg.who === 'user' ? 'user' : 'omni', msg.text);
+        if (callTranscript.length < 200) callTranscript.push({ who: msg.who === 'user' ? 'user' : 'agent', text: String(msg.text || '').slice(0, 2000) });
         if (msg.who !== 'user') sfx('message');
         break;
       case 'links_shared':
@@ -501,6 +745,7 @@
 
   function endCallUI(text) {
     sfx('hangup');
+    finishCallArtifacts();
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
     stopPlayback();
     setCallState(text || 'Call ended');
@@ -516,6 +761,26 @@
     $('callOverlay').classList.add('hidden');
     $('callOverlay').setAttribute('aria-hidden', 'true');
     if (document.querySelector('#view-history').classList.contains('active')) loadHistory();
+  }
+
+  /* SymAgent transfer: close this leg, auto-dial the specialist. */
+  function handleTransfer(t) {
+    if (!t || !t.id) return;
+    setCallState('Transferring to ' + (t.name || 'agent') + '…');
+    chatBubble('omni', 'Transferring you to ' + (t.name || 'a specialist') + ' now.');
+    sfx('connect');
+    var tok = callToken;
+    setTimeout(function () {
+      if (tok !== callToken) return;
+      callToken++; // suppress the old socket's onclose
+      finishCallArtifacts(); // save recording + summary for the SymAgent leg
+      if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+      stopMic(); stopPlayback();
+      stopRecording().catch(function () {});
+      if (timerInt) { clearInterval(timerInt); timerInt = null; }
+      if (greetFallbackT) { clearTimeout(greetFallbackT); greetFallbackT = null; }
+      startCall({ agentId: t.id });
+    }, 1600);
   }
 
   $('pHangup').onclick = function () {
@@ -550,6 +815,6 @@
   window.addEventListener('beforeunload', function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hangup' })); });
 
   var f = document.createElement('footer'); f.className = 'note';
-  f.textContent = 'Symbiote Calling v4.1 · 100 agents · local demo — fictional numbers, not a real phone network.';
+  f.textContent = 'Symbiote Calling v6.0 · 101 agents · local demo — fictional numbers, not a real phone network.';
   document.getElementById('main').appendChild(f);
 })();

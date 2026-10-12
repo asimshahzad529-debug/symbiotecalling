@@ -31,6 +31,7 @@
         <input id="agentSearch" type="text" placeholder="Search agents…" autocomplete="off">
       </div>
     </div>
+    <div class="stats" id="statsRow" aria-label="Usage statistics"></div>
     <div class="grid" id="agentGrid"></div>
   </section>
 
@@ -57,14 +58,20 @@
       <div><h1>Call history</h1><p class="dim">Stored on this machine only — agent, number, time, duration.</p></div>
       <button class="btn ghost" id="clearHistory" type="button">Clear history</button>
     </div>
+    <div id="histDetail" class="hidden"></div>
     <div class="list" id="historyList"></div>
   </section>
 
   <section class="view" id="view-memory">
     <div class="view-head">
       <div><h1>Memory</h1><p class="dim">What your agents remember — notes, appointments, and full transcripts, per call.</p></div>
-      <button class="btn ghost" id="clearMemories" type="button">Clear all</button>
+      <div class="mem-actions">
+        <button class="btn ghost" id="backupMemories" type="button">Download backup</button>
+        <button class="btn ghost" id="restoreMemories" type="button">Restore</button>
+        <button class="btn ghost" id="clearMemories" type="button">Clear all</button>
+      </div>
     </div>
+    <input type="file" id="restoreFile" accept="application/json,.json" class="hidden">
     <p class="dim tiny mem-note">Memories are tied to your current API key. Changing the key wipes memories and history.</p>
     <div id="memoryDetail" class="hidden"></div>
     <div class="list" id="memoryList"></div>
@@ -111,6 +118,7 @@
       <div class="p-number mono dim" id="pNumber">—</div>
       <div class="p-state" id="pState">Dialing…</div>
       <div class="eq hidden" id="pEq" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <div class="rec-ind hidden" id="pRec" title="This call is being recorded on your device"><span class="rec-dot"></span><span class="mono" id="pRecTime">00:00</span></div>
     </div>
 
     <div class="p-controls">
@@ -153,6 +161,8 @@
 </div>
 
 <script src="avatar.js"></script>
+<script src="recorder.js"></script>
+<script src="summary.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

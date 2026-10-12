@@ -28,6 +28,7 @@ var prompt = require('./prompt');
 
 var DEFAULT_MODELS = ['gemini-3.8-live', 'gemini-3.1-flash-live-preview', 'gemini-3.8-live-extended-thinking'];
 var END_CALL_DELAY_MS = 4000; // let the spoken goodbye finish before closing
+var TRANSFER_DELAY_MS = 2500; // grace for the spoken handoff before the transfer takes over
 
 function keyHashOf(key) { return crypto.createHash('sha256').update(String(key)).digest('hex'); }
 
@@ -157,7 +158,11 @@ Bridge.prototype.onEvent = function (ev) {
     this.connected = true;
     var info = { agentId: this.agent.id, agentName: this.agent.name, number: this.agent.number };
     var self2 = this;
-    this._logStartP = this.history.logStart(info).then(function (id) { self2.callId = id; return id; }).catch(function () { return null; });
+    this._logStartP = this.history.logStart(info).then(function (id) {
+      self2.callId = id;
+      if (self2.alive && id) self2.send({ type: 'call_id', callId: id }); // client needs it for recordings/summaries
+      return id;
+    }).catch(function () { return null; });
     if (this.memory) {
       this._memP = this.memory.beginCall(Object.assign({ keyHash: this.keyHash }, info))
         .then(function (id) { self2.memId = id; return id; }).catch(function () { return null; });
@@ -179,6 +184,16 @@ Bridge.prototype.onEvent = function (ev) {
     this.finalizeMemory();
     var s = this;
     setTimeout(function () { s.shutdown(); }, this.endCallDelayMs);
+    return; // don't forward the raw tool event to the UI
+  }
+  if (ev.type === 'transfer_requested') {
+    // SymAgent handed the caller to a specialist. Tell the phone UI which
+    // agent is taking over, finalize the memory, then close after a short
+    // grace delay so the spoken handoff finishes.
+    this.send({ type: 'transfer', target: ev.target });
+    this.finalizeMemory();
+    var s2 = this;
+    setTimeout(function () { s2.shutdown(); }, TRANSFER_DELAY_MS);
     return; // don't forward the raw tool event to the UI
   }
   this.send(ev);

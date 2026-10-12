@@ -19,6 +19,7 @@ var bridge = require('./src/bridge');
 var agents = require('./src/agents');
 var storeMod = require('./src/store');
 var memoryMod = require('./src/memory');
+var statsMod = require('./src/stats');
 
 (function loadEnv() {
   var p = path.join(__dirname, '.env');
@@ -34,8 +35,11 @@ var PORT = parseInt(process.env.PORT || '3000', 10);
 // we must bind all interfaces or the platform router cannot reach us.
 var HOST = process.env.HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1');
 var PUBLIC = path.join(__dirname, 'public');
-var history = new storeMod.CallHistory(path.join(__dirname, 'data'));
-var memory = new memoryMod.MemoryStore(path.join(__dirname, 'data'));
+// Data dir is configurable so hosting volumes survive redeploys:
+// e.g. DATA_DIR=/data with a Railway volume mounted at /data.
+var DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+var history = new storeMod.CallHistory(DATA_DIR);
+var memory = new memoryMod.MemoryStore(DATA_DIR);
 
 var MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -47,6 +51,19 @@ var MIME = {
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
+}
+
+function readBody(req) {
+  return new Promise(function (resolve, reject) {
+    var chunks = [], size = 0;
+    req.on('data', function (c) {
+      size += c.length;
+      if (size > 8 * 1024 * 1024) { reject(new Error('body too large')); try { req.destroy(); } catch (e) {} return; }
+      chunks.push(c);
+    });
+    req.on('end', function () { resolve(Buffer.concat(chunks).toString('utf8')); });
+    req.on('error', reject);
+  });
 }
 
 function handleApi(req, res) {
@@ -71,6 +88,10 @@ function handleApi(req, res) {
     try { return sendJson(res, 200, { memories: memory.list() }); }
     catch (e) { return sendJson(res, 500, { error: 'read failed' }); }
   }
+  if (p === '/api/stats' && req.method === 'GET') {
+    try { return sendJson(res, 200, { stats: statsMod.computeStats(history.list(), memory.list()) }); }
+    catch (e) { return sendJson(res, 500, { error: 'stats failed' }); }
+  }
   if (p === '/api/memories' && req.method === 'DELETE') {
     memory.clear().then(function () { sendJson(res, 200, { cleared: true }); })
       .catch(function () { sendJson(res, 500, { error: 'clear failed' }); });
@@ -89,6 +110,47 @@ function handleApi(req, res) {
     return;
   }
   return sendJson(res, 404, { error: 'not found' });
+}
+
+/* POST routes that need a JSON body. */
+async function handlePost(req, res) {
+  var url = new URL(req.url, 'http://localhost');
+  var p = url.pathname;
+  try {
+    var body = JSON.parse(await readBody(req));
+    if (p === '/api/restore') {
+      var mems = body.memories, calls = body.history;
+      if ((mems === undefined && calls === undefined) ||
+          (mems !== undefined && !Array.isArray(mems)) ||
+          (calls !== undefined && !Array.isArray(calls))) {
+        return sendJson(res, 400, { error: 'body must contain memories[] and/or history[] arrays' });
+      }
+      var out = { memories: 0, history: 0 };
+      if (Array.isArray(mems)) out.memories = await memory.importAll(mems);
+      if (Array.isArray(calls)) out.history = await history.importAll(calls);
+      return sendJson(res, 200, { restored: out });
+    }
+    var sumMatch = p.match(/^\/api\/history\/([A-Za-z0-9_]+)\/summary$/);
+    if (sumMatch) {
+      var summary = body && typeof body.summary === 'string' ? body.summary.trim() : '';
+      if (!summary) return sendJson(res, 400, { error: 'summary required' });
+      var call = history.list().find(function (c) { return c.id === sumMatch[1]; });
+      if (!call) return sendJson(res, 404, { error: 'call not found' });
+      await history.setSummary(call.id, summary);
+      // Mirror into the matching memory entry so the Memory page shows it too.
+      try {
+        var mem = memory.list().find(function (m) {
+          return m.agentId === call.agentId &&
+            Math.abs(Date.parse(m.startedAt) - Date.parse(call.startedAt)) < 120000;
+        });
+        if (mem) await memory.setSummary(mem.id, summary);
+      } catch (e) { /* non-fatal */ }
+      return sendJson(res, 200, { saved: true });
+    }
+    return sendJson(res, 404, { error: 'not found' });
+  } catch (e) {
+    return sendJson(res, 400, { error: 'bad request' });
+  }
 }
 
 function serveStatic(req, res) {
@@ -117,7 +179,10 @@ function serveStatic(req, res) {
 }
 
 var server = http.createServer(function (req, res) {
-  if (req.url.startsWith('/api/')) { try { handleApi(req, res); } catch (e) { sendJson(res, 500, { error: 'server error' }); } return; }
+  if (req.url.startsWith('/api/')) {
+    if (req.method === 'POST') { handlePost(req, res); return; }
+    try { handleApi(req, res); } catch (e) { sendJson(res, 500, { error: 'server error' }); } return;
+  }
   serveStatic(req, res);
 });
 
@@ -130,5 +195,5 @@ wss.on('connection', function (ws) {
 });
 
 server.listen(PORT, HOST, function () {
-  console.log('[calling] Symbiote Calling v5.0 on http://' + HOST + ':' + PORT + ' — ' + agents.list().length + ' agents ready');
+  console.log('[calling] Symbiote Calling v6.0 on http://' + HOST + ':' + PORT + ' — ' + agents.list().length + ' agents ready');
 });

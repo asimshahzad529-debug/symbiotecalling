@@ -237,3 +237,29 @@ footer.note{text-align:center;color:var(--muted);font-size:.74rem;padding:1.8rem
 /* speaking ring pulse */
 @keyframes ringpulse{0%,100%{box-shadow:0 0 0 3px rgba(124,58,237,.25)}50%{box-shadow:0 0 0 7px rgba(124,58,237,.08)}}
 #pAvatar.ring{animation:ringpulse 1.6s ease-in-out infinite}
+
+/* ---------- v6.0: recording indicator ---------- */
+.rec-ind{display:flex;align-items:center;justify-content:center;gap:.45rem;margin-top:.5rem;font-size:.8rem;color:var(--dim)}
+.rec-dot{width:9px;height:9px;border-radius:50%;background:#e5484d;animation:recblink 1.2s ease-in-out infinite}
+@keyframes recblink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ---------- v6.0: dashboard stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem;margin-bottom:1rem}
+.stat-card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:.75rem .9rem;display:flex;gap:.7rem;align-items:center;min-width:0}
+.stat-ic{width:34px;height:34px;flex:0 0 34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--acc) 14%,transparent);color:var(--acc)}
+.stat-num{font-size:1.25rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat-lbl{font-size:.72rem;color:var(--dim);margin-top:.1rem}
+.top5{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:.75rem .9rem;margin-bottom:1rem}
+.top5 h4{margin:0 0 .5rem;font-size:.8rem;color:var(--dim);font-weight:600}
+.top5-row{display:flex;align-items:center;gap:.6rem;padding:.3rem 0;font-size:.85rem}
+.top5-row .avatar{width:28px;height:28px;font-size:.8rem}
+.top5-row .t-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top5-row .t-meta{color:var(--dim);font-size:.75rem;font-variant-numeric:tabular-nums}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+/* ---------- v6.0: memory actions + detail sections ---------- */
+.mem-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.det-sec{margin-top:1.1rem}
+.det-sec h3{margin:0 0 .45rem}
+.det-summary{white-space:pre-wrap;font-size:.9rem;line-height:1.55;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.7rem .9rem}
+.det-row-btns{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem}

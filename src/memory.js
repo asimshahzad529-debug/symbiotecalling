@@ -170,4 +170,25 @@ MemoryStore.prototype.clear = async function () {
   await this._atomic(function () { return { next: [] }; });
 };
 
+/**
+ * Atomically replace all memories with `arr` (backup/restore).
+ * Non-object entries are skipped. Returns the imported count.
+ */
+MemoryStore.prototype.importAll = async function (arr) {
+  if (!Array.isArray(arr)) throw new Error('importAll expects an array');
+  var next = arr.filter(function (e) { return e !== null && typeof e === 'object'; });
+  await this._atomic(function () { return { next: next }; });
+  return next.length;
+};
+
+/** Set entry.summary (auto call summary). Truncated to 2000 chars. No-op if id not found. */
+MemoryStore.prototype.setSummary = async function (id, summary) {
+  var text = String(summary).slice(0, 2000);
+  await this._atomic(function (all) {
+    var e = all.find(function (x) { return x.id === id; });
+    if (e) e.summary = text;
+    return { next: all };
+  });
+};
+
 module.exports = { MemoryStore: MemoryStore, sha256: sha256 };
