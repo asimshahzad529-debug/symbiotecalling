@@ -199,11 +199,14 @@ CustomAgentStore.prototype.remove = async function (keyHash, id) {
 
 /**
  * cloneFrom(keyHash, sourceAgent) -> pre-filled draft object, NOT saved.
- * sourceAgent may be a built-in agent (from src/agents.js) or a custom record.
+ * sourceAgent must be a built-in agent (from src/agents.js).
+ * Custom agents are NOT cloneable — cloning them is rejected here and at
+ * the API route (never trust the client).
  */
 function cloneFrom(keyHash, sourceAgent) {
   if (!isKeyHash(keyHash)) throw new Error('invalid keyHash');
   if (!sourceAgent || typeof sourceAgent !== 'object') throw new Error('sourceAgent required');
+  if (sourceAgent.isCustom === true) throw new Error('custom agents cannot be cloned');
   var v = validate({
     name: sourceAgent.name || '',
     number: sourceAgent.number || '',

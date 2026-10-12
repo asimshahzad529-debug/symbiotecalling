@@ -245,8 +245,9 @@
     actions.appendChild(callBtn);
 
     // Clone is optional — the sibling custom-agents workstream provides
-    // window.CustomAgents.cloneFrom(agent); hide when absent.
-    if (global.CustomAgents && typeof global.CustomAgents.cloneFrom === 'function') {
+    // window.CustomAgents.cloneFrom(agent); hide when absent, and always
+    // hide for custom agents (custom agents are not cloneable).
+    if (!agent.isCustom && global.CustomAgents && typeof global.CustomAgents.cloneFrom === 'function') {
       var cloneBtn = el('button', 'btn ghost dir-sheet-clone', 'Clone');
       cloneBtn.type = 'button';
       cloneBtn.onclick = function () {

@@ -116,13 +116,18 @@ module.exports = {
     assert.strictEqual(draft.prompt, built.prompt);
     assert.deepStrictEqual(s.list(KEY_A), [], 'clone does not save');
   },
-  'cloneFrom pre-fills from a custom agent': async function () {
+  'cloneFrom rejects a custom agent (clone protection)': async function () {
     var s = freshStore();
     var c = await s.create(KEY_A, valid());
-    var draft = customAgents.cloneFrom(KEY_A, c);
-    assert.strictEqual(draft.name, 'Test Agent');
-    assert.strictEqual(draft.tone, 'friendly');
-    assert.strictEqual(draft.clonedFrom, c.id);
+    assert.throws(function () { customAgents.cloneFrom(KEY_A, c); }, /cannot be cloned/i);
+    assert.deepStrictEqual(s.list(KEY_A).length, 1, 'no draft saved');
+  },
+  'cloneFrom rejects a toAgent-shaped custom object': async function () {
+    var s = freshStore();
+    var c = await s.create(KEY_A, valid());
+    var shaped = customAgents.toAgent(c);
+    assert.strictEqual(shaped.isCustom, true);
+    assert.throws(function () { customAgents.cloneFrom(KEY_A, shaped); }, /cannot be cloned/i);
   },
   'toAgent shape matches built-in agent fields': async function () {
     var s = freshStore();
@@ -223,7 +228,8 @@ module.exports = {
     var clone = await req('POST', '/api/v7/custom-agents/clone', { sourceId: 'lina' });
     assert.strictEqual(clone._obj.draft.name, 'Elena');
     var clone2 = await req('POST', '/api/v7/custom-agents/clone', { sourceId: id });
-    assert.strictEqual(clone2._obj.draft.name, 'Edited');
+    assert.strictEqual(clone2._code, 403, 'custom agent clone rejected');
+    assert.ok(/cannot be cloned/i.test(clone2._obj.error));
     var del = await req('DELETE', '/api/v7/custom-agents/' + id);
     assert.deepStrictEqual(del._obj, { ok: true });
     assert.ok(!fs.existsSync(path.join(dir, 'avatars_custom', id + '.jpg')), 'avatar removed with agent');
@@ -255,5 +261,33 @@ module.exports = {
     assert.strictEqual(clone._code, 404);
     var qk = await h({ method: 'GET', url: '/api/v7/custom-agents?keyHash=' + KEY_A, headers: {} }, {});
     assert.ok(qk !== false, 'query keyHash accepted');
+  },
+  'API: clone of a custom agent id -> 403 (clone protection)': async function () {
+    var dir = tmpDir();
+    var reqQ = [];
+    var h = apiv7custom.mount(null, {
+      sendJson: function (res, code, obj) { res._code = code; res._obj = obj; return true; },
+      readBody: async function () { return reqQ.shift() || '{}'; },
+      dataDir: dir,
+      agents: agents,
+      customAgents: customAgents
+    });
+    function req3(method, u, body) {
+      if ((method === 'POST' || method === 'PUT') && body) reqQ.push(JSON.stringify(body));
+      var r = { method: method, url: u, headers: { 'x-key-hash': KEY_A } };
+      var res = {};
+      return h(r, res).then(function () { return res; });
+    }
+    // Built-in clone still works.
+    var okBuilt = await req3('POST', '/api/v7/custom-agents/clone', { sourceId: 'lina' });
+    assert.strictEqual(okBuilt._code, 200);
+    assert.strictEqual(okBuilt._obj.draft.name, 'Elena');
+    // Custom-agent ids are rejected even though they exist in the store.
+    var s = new customAgents.CustomAgentStore(dir);
+    var c = await s.create(KEY_A, valid());
+    assert.ok(c.id.indexOf('custom_') === 0);
+    var denied = await req3('POST', '/api/v7/custom-agents/clone', { sourceId: c.id });
+    assert.strictEqual(denied._code, 403);
+    assert.ok(/cannot be cloned/i.test(denied._obj.error));
   }
 };

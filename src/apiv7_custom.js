@@ -153,7 +153,8 @@ function mount(api, ctx) {
       if (!sourceId) return sendJson(res, 400, { error: 'sourceId is required' });
       var source = null;
       if (sourceId.indexOf('custom_') === 0) {
-        try { source = store.get(keyHash, sourceId); } catch (e) { source = null; }
+        // Clone protection: custom agents are never cloneable, by anyone.
+        return sendJson(res, 403, { error: 'custom agents cannot be cloned' });
       } else {
         source = agentsMod.getById(sourceId);
       }

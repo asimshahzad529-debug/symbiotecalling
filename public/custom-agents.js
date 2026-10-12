@@ -18,16 +18,22 @@
   var TONES = ['professional', 'friendly', 'confident', 'casual'];
 
   // v7 WS7 adapter: directory.js profileSheet calls
-  // window.CustomAgents.cloneFrom(agent) with a built-in (or custom) agent
-  // object. We fetch a pre-filled draft from the clone API, stash it, and
-  // ask app.js (via event) to open the Custom Agents page — renderPage()
-  // picks the draft up and opens the builder form with it.
+  // window.CustomAgents.cloneFrom(agent) with a built-in agent object.
+  // Custom agents are never cloneable — this is rejected here, at the
+  // button level, and server-side. We fetch a pre-filled draft from the
+  // clone API, stash it, and ask app.js (via event) to open the Custom
+  // Agents page — renderPage() picks the draft up and opens the builder
+  // form with it.
   var pendingDraft = null;
 
   function cloneFrom(agent) {
     var sid = agent && (agent.id || agent.sourceId);
     if (!sid) {
       try { alert('Clone failed: no source agent'); } catch (e) {}
+      return;
+    }
+    if (agent.isCustom === true || (typeof sid === 'string' && sid.indexOf('custom_') === 0)) {
+      try { alert('Custom agents cannot be cloned'); } catch (e) {}
       return;
     }
     api(API + '/clone', 'POST', { sourceId: sid }).then(function (j) {
@@ -405,21 +411,16 @@
           '<div class="ca-card-actions"></div>';
         var actions = card.querySelector('.ca-card-actions');
         var bEdit = el('button', 'ca-btn ca-btn-sm', 'Edit');
-        var bClone = el('button', 'ca-btn ca-btn-sm', 'Clone');
+        // No Clone button here: custom agents are not cloneable, by anyone.
         var bDel = el('button', 'ca-btn ca-btn-sm ca-btn-danger', 'Delete');
         bEdit.addEventListener('click', function () { openForm(a); });
-        bClone.addEventListener('click', function () {
-          api(API + '/clone', 'POST', { sourceId: a.id }).then(function (j) {
-            openForm(null, j.draft);
-          }).catch(function (e) { alert('Clone failed: ' + e.message); });
-        });
         bDel.addEventListener('click', function () {
           if (!confirm('Delete "' + a.name + '"?')) return;
           api(API + '/' + encodeURIComponent(a.id), 'DELETE').then(refresh).catch(function (e) {
             alert('Delete failed: ' + e.message);
           });
         });
-        actions.appendChild(bEdit); actions.appendChild(bClone); actions.appendChild(bDel);
+        actions.appendChild(bEdit); actions.appendChild(bDel);
         listEl.appendChild(card);
       });
     }
