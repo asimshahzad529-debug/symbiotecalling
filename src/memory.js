@@ -4,9 +4,13 @@
  *
  * Each finished call becomes a memory entry: agent, time, duration,
  * agent-saved notes (appointments, facts) and the conversation transcript.
- * Memories are scoped to the API key in use (by SHA-256 hash — the key
- * itself is never stored). If the key changes, all memories AND call
- * history are wiped so one key's data never leaks into another's.
+ *
+ * v7 key gating: storage is PER-KEYHASH-PARTITIONED. Construct with the
+ * caller's keyHash (sha256 hex of their API key — the key itself is never
+ * stored) and this instance reads/writes DATA_DIR/memories_<keyHash>.json,
+ * so one key's memories never leak into another's and switching keys never
+ * wipes anything. Constructed WITHOUT a keyHash, it keeps the legacy
+ * behavior (single memories.json + keyscope.json with wipe-on-key-change).
  *
  * Atomic writes (temp + rename), serialized. Local demo data only.
  */
@@ -14,15 +18,25 @@
 var fs = require('fs');
 var path = require('path');
 var crypto = require('crypto');
+var keystoreMod = require('./keystore');
+var cleanupMod = require('./cleanup');
 
 function sha256(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
 
-function MemoryStore(dataDir) {
+function MemoryStore(dataDir, keyHash) {
   this.dataDir = dataDir;
-  this.file = path.join(dataDir, 'memories.json');
+  // NOTE: named scopeKeyHash (not keyHash) so it does not shadow the
+  // MemoryStore.prototype.keyHash(apiKey) helper below.
+  this.scopeKeyHash = keyHash == null ? null : keystoreMod.normalizeKeyHash(keyHash);
+  this.file = path.join(dataDir, this.scopeKeyHash ? 'memories_' + this.scopeKeyHash + '.json' : 'memories.json');
   this.scopeFile = path.join(dataDir, 'keyscope.json');
   this._queue = Promise.resolve();
 }
+
+/** Storage file name for a keyHash (null -> legacy shared file). Exposed for tests/docs. */
+MemoryStore.fileNameFor = function (keyHash) {
+  return keyHash == null ? 'memories.json' : 'memories_' + keystoreMod.normalizeKeyHash(keyHash) + '.json';
+};
 
 MemoryStore.prototype._ensure = function (file, def) {
   if (!fs.existsSync(this.dataDir)) fs.mkdirSync(this.dataDir, { recursive: true });
@@ -70,10 +84,17 @@ MemoryStore.prototype.setScope = function (keyHash) {
 MemoryStore.prototype.keyHash = function (apiKey) { return sha256(apiKey); };
 
 /**
- * Ensure the scope matches this key. If a different key was used before,
- * wipe memories (caller should also wipe history). Returns {reset:boolean}.
+ * Ensure the scope matches this key.
+ *
+ * Partitioned instances (constructed WITH a keyHash) are already isolated
+ * per key, so this is a no-op that always reports { reset: false } — no
+ * wiping, ever. Legacy instances (constructed WITHOUT a keyHash, the
+ * pre-v7 shared stores) keep the old behavior: if a different key was used
+ * before, wipe memories (caller should also wipe history) and report
+ * { reset: true }.
  */
 MemoryStore.prototype.ensureScope = async function (keyHash) {
+  if (this.scopeKeyHash) return { reset: false };
   var prev = this.getScope();
   if (prev && prev !== keyHash) {
     await this._atomic(function () { return { next: [] }; });
@@ -189,6 +210,45 @@ MemoryStore.prototype.setSummary = async function (id, summary) {
     if (e) e.summary = text;
     return { next: all };
   });
+};
+
+/**
+ * v7 auto-cleanup: drop memory entries (notes + transcripts) whose
+ * startedAt is older than `days`. Entries with no/invalid startedAt are
+ * kept. Returns the removed count.
+ */
+MemoryStore.prototype.pruneOlderThan = async function (days) {
+  var removed = 0;
+  await this._atomic(function (all) {
+    var fresh = all.filter(function (r) {
+      var drop = r && typeof r === 'object' && cleanupMod.isOlderThan(r.startedAt, days);
+      if (drop) removed++;
+      return !drop;
+    });
+    return { next: fresh, result: removed };
+  });
+  return removed;
+};
+
+/**
+ * Prune every memory partition under dataDir (legacy memories.json plus
+ * all memories_<keyHash>.json). Returns { files, removed }. Corrupt
+ * partitions are skipped, never fatal.
+ */
+MemoryStore.pruneAll = async function (dataDir, days) {
+  var out = { files: 0, removed: 0 };
+  var names;
+  try { names = fs.readdirSync(dataDir); }
+  catch (e) { return out; }
+  for (var i = 0; i < names.length; i++) {
+    if (!/^memories(_[0-9a-f]{64})?\.json$/.test(names[i])) continue;
+    out.files++;
+    try {
+      var m = new MemoryStore(dataDir, names[i] === 'memories.json' ? null : names[i].slice(9, -5));
+      out.removed += await m.pruneOlderThan(days);
+    } catch (e) { /* skip corrupt partition */ }
+  }
+  return out;
 };
 
 module.exports = { MemoryStore: MemoryStore, sha256: sha256 };

@@ -6,7 +6,7 @@
  * Written independently for this project (clean-room).
  */
 
-function buildAgentInstruction(agent, recallText) {
+function buildAgentInstruction(agent, recallText, customDir) {
   var genderLine = agent.gender === 'female'
     ? 'Voice & identity: you are female — speak as a woman, with a warm feminine voice and manner.'
     : agent.gender === 'male'
@@ -22,6 +22,7 @@ function buildAgentInstruction(agent, recallText) {
     lines.push(agent.knowledge);
     lines.push('');
     if (agent.id === 'symagent') lines.push(callingAgentsDirectory(), '');
+    if (agent.id === 'symagent' && customDir) lines.push(customDir, '');
   }
   lines.push(
     'MEMORY OF PAST CALLS',

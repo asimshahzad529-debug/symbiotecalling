@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<!-- ============================================================================
+  CONTRACT FOR INTEGRATOR:
+  Add a "Docs" tab to the nav in public/index.html that links to this page
+  (docs.html). Suggested: a nav button/tab labeled "Docs" pointing to "docs.html".
+  This page is standalone — no changes to app.js, index.html, server.js or src/*
+  were made for it.
+============================================================================= -->
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Symbiote Calling — User Guide</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Docs-only styles. Everything else reuses the app's CSS variables. */
+:root{ --toc-w: 250px; }
+html{scroll-behavior:smooth}
+.docs-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:1rem;
+  padding:.65rem 1.1rem;background:color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.docs-top .brand{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.05rem;white-space:nowrap}
+.docs-top .brand em{font-style:normal;color:var(--acc)}
+.back-link{display:inline-flex;align-items:center;gap:.4rem;font:inherit;font-weight:600;font-size:.85rem;
+  color:var(--ink2);text-decoration:none;border:1px solid var(--line2);border-radius:10px;
+  padding:.45rem .8rem;background:var(--panel);transition:transform .1s,border-color .15s}
+.back-link:hover{border-color:var(--acc);color:var(--ink)}
+.back-link:active{transform:scale(.96)}
+.docs-hero{max-width:1060px;margin:0 auto;padding:2.6rem 1rem 1.6rem;text-align:left}
+.docs-hero .kicker{display:inline-block;font-size:.72rem;letter-spacing:.16em;font-weight:700;
+  color:var(--acc);background:var(--acc-soft);border:1px solid var(--line2);border-radius:99px;
+  padding:.28rem .85rem;margin-bottom:.9rem;text-transform:uppercase}
+.docs-hero h1{font-size:2.2rem;line-height:1.15;margin:.1em 0 .3em;letter-spacing:-.02em}
+.docs-hero h1 em{font-style:normal;color:var(--acc)}
+.docs-hero p.lede{font-size:1.02rem;color:var(--ink2);max-width:640px;margin:0}
+.docs-layout{max-width:1060px;margin:0 auto;padding:0 1rem 5rem;display:flex;gap:2rem;align-items:flex-start}
+.toc{position:sticky;top:64px;flex:0 0 var(--toc-w);max-height:calc(100dvh - 84px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.9rem .95rem;box-shadow:var(--shadow)}
+.toc h4{margin:.1rem 0 .5rem;font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.1rem}
+.toc a{display:flex;gap:.55rem;align-items:baseline;text-decoration:none;color:var(--ink2);
+  font-size:.83rem;padding:.4rem .55rem;border-radius:9px;line-height:1.35}
+.toc a .n{font-family:"Space Grotesk";font-weight:700;color:var(--acc);font-size:.72rem;flex:0 0 1.4em}
+.toc a:hover{background:var(--panel2);color:var(--ink)}
+.toc a.on{background:var(--acc-soft);color:var(--ink)}
+.docs-main{flex:1;min-width:0}
+.dsec{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.5rem 1.6rem;
+  margin-bottom:1.1rem;box-shadow:var(--shadow);scroll-margin-top:76px}
+.dsec-head{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.7rem;flex-wrap:wrap}
+.dsec-num{font-family:"Space Grotesk";font-weight:700;color:var(--acc);font-size:.85rem;letter-spacing:.08em}
+.dsec h2{font-size:1.35rem;margin:0;letter-spacing:-.01em}
+.dsec h3{font-size:1.02rem;margin:1.3rem 0 .4rem;color:var(--ink)}
+.dsec p{margin:.5rem 0;color:var(--ink2);font-size:.92rem}
+.dsec p strong, .dsec li strong{color:var(--ink)}
+.dsec ul,.dsec ol{margin:.45rem 0 .8rem;padding-left:1.25rem;color:var(--ink2);font-size:.92rem}
+.dsec li{margin:.28rem 0}
+.dsec .mono{font-size:.82em;background:var(--panel2);border:1px solid var(--line);
+  border-radius:6px;padding:.08em .4em;white-space:nowrap}
+.callout{border:1px solid var(--line2);border-left:3px solid var(--acc);border-radius:10px;
+  background:var(--panel2);padding:.65rem .9rem;margin:.8rem 0;font-size:.88rem;color:var(--ink2)}
+.callout.warn{border-left-color:var(--err)}
+.callout.ok{border-left-color:var(--ok)}
+.callout b{color:var(--ink)}
+.steps{list-style:none;margin:.6rem 0;padding:0;counter-reset:st;display:flex;flex-direction:column;gap:.55rem}
+.steps li{counter-increment:st;display:flex;gap:.75rem;align-items:flex-start;font-size:.92rem;color:var(--ink2)}
+.steps li::before{content:counter(st);flex:0 0 1.7em;width:1.7em;height:1.7em;border-radius:50%;
+  background:var(--acc-soft);color:var(--acc);font-weight:700;font-size:.8rem;
+  display:inline-flex;align-items:center;justify-content:center;font-family:"Space Grotesk"}
+.faq dt{font-weight:700;color:var(--ink);font-size:.94rem;margin:1rem 0 .25rem}
+.faq dd{margin:0 0 .4rem;color:var(--ink2);font-size:.9rem}
+kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:var(--panel2);
+  border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:.08rem .45rem}
+.dsec table{width:100%;border-collapse:collapse;font-size:.87rem;margin:.6rem 0}
+.dsec th,.dsec td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--line)}
+.dsec th{color:var(--muted);font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.06em}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+@media(max-width:820px){
+  .toc{display:none}
+  .two-col{grid-template-columns:1fr}
+  .docs-hero h1{font-size:1.7rem}
+}
+</style>
+</head>
+<body>
+
+<header class="docs-top">
+  <a class="back-link" href="index.html" aria-label="Back to Symbiote Calling">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+    Back to Symbiote Calling
+  </a>
+  <span class="brand">Symbiote <em>Calling</em> · User Guide</span>
+  <span style="margin-left:auto"></span>
+  <button class="icon-btn sm" id="docsTheme" type="button" aria-label="Toggle theme">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+</header>
+
+<section class="docs-hero">
+  <span class="kicker">v7 · Complete user guide</span>
+  <h1>Everything <em>Symbiote Calling</em> can do, start to finish.</h1>
+  <p class="lede">101 AI calling agents you talk to with your voice, right from the browser. This guide walks you through the key, the first call, custom agents, memory, and hosting — in short sections you can skim.</p>
+</section>
+
+<div class="docs-layout">
+  <nav class="toc" aria-label="Guide sections">
+    <h4>On this page</h4>
+    <ol id="tocList">
+      <li><a href="#getting-started"><span class="n">01</span>Getting started</a></li>
+      <li><a href="#making-calls"><span class="n">02</span>Making calls</a></li>
+      <li><a href="#agents"><span class="n">03</span>Agents</a></li>
+      <li><a href="#custom-agents"><span class="n">04</span>Custom agents</a></li>
+      <li><a href="#during-after-calls"><span class="n">05</span>During &amp; after calls</a></li>
+      <li><a href="#memory-persistence"><span class="n">06</span>Memory &amp; persistence</a></li>
+      <li><a href="#dashboard-stats"><span class="n">07</span>Dashboard &amp; stats</a></li>
+      <li><a href="#deploying-railway"><span class="n">08</span>Deploying on Railway</a></li>
+      <li><a href="#troubleshooting"><span class="n">09</span>Troubleshooting</a></li>
+      <li><a href="#faq"><span class="n">10</span>FAQ</a></li>
+    </ol>
+  </nav>
+
+  <main class="docs-main">
+
+    <!-- ============================ 01 ============================ -->
+    <section class="dsec" id="getting-started">
+      <div class="dsec-head"><span class="dsec-num">01</span><h2>Getting started</h2></div>
+      <p>Symbiote Calling runs voice calls through Google's Gemini Live — you bring your own API key, and the app does the rest.</p>
+      <ol class="steps">
+        <li>Open the app and head to <strong>Settings</strong>.</li>
+        <li>Paste <strong>one Gemini API key</strong> (get a free one from <span class="mono">aistudio.google.com/apikey</span>) — it powers every agent.</li>
+        <li>Your key is your login: the app stays behind the key screen until a key is entered, and your data belongs to your key (see <a href="#memory-persistence">Memory &amp; persistence</a>).</li>
+        <li>Go to <strong>Agents</strong> and tap <strong>Call</strong> on anyone.</li>
+      </ol>
+      <div class="callout ok"><b>Your key is never stored.</b> It lives in server memory for the call only — never written to disk, never logged, never put in a URL. The Settings page shows only a status line like "Key set for this page session".</div>
+      <h3>Key profiles</h3>
+      <p>If you juggle more than one key (say, a personal key and a demo key), you can save named <strong>key profiles</strong> and switch between them from the key screen — each profile keeps its own calls, memories, and custom agents.</p>
+      <h3>Other settings worth knowing</h3>
+      <ul>
+        <li><strong>Model</strong> — you can change the Live model order yourself (default: <span class="mono">gemini-3.8-live</span>, with cheaper/fallback models after it).</li>
+        <li><strong>Mic default</strong> — mic permission is requested only when a call starts; you can toggle the default here.</li>
+        <li><strong>Theme</strong> — light by default, one-tap dark mode (remembered).</li>
+        <li><strong>Accent color</strong> — pick an accent color and the whole app follows it.</li>
+      </ul>
+    </section>
+
+    <!-- ============================ 02 ============================ -->
+    <section class="dsec" id="making-calls">
+      <div class="dsec-head"><span class="dsec-num">02</span><h2>Making calls</h2></div>
+      <h3>The agent directory</h3>
+      <p>The <strong>Agents</strong> tab lists all built-in agents with their portrait, niche, and number. Use the <strong>search/filter</strong> box to find one by name or niche (try "visa" or "tutor"), or tap an agent card to open its <strong>profile sheet</strong> with details. Tap <strong>Call</strong> to start talking.</p>
+      <h3>The dialer</h3>
+      <p>Know the number? Open the <strong>Dialer</strong> and punch it in — <strong>smart dialer</strong> shows matching agents above the pad as you type, with exact matches highlighted. The dialer also has a <strong>recents</strong> tab so you can redial people you called before in one tap. Dialing an unknown number simply tells you it doesn't exist — nothing breaks.</p>
+      <h3>The call screen</h3>
+      <p>A Samsung-style phone slides up: <span class="mono">Dialing…</span> → <span class="mono">Connecting…</span> → a live timer in <span class="mono">mm:ss</span>. While the call is live you have:</p>
+      <ul>
+        <li><strong>Mute</strong> — silence your mic.</li>
+        <li><strong>Keypad</strong> — a DTMF pad with real touch tones (handy for menus; tones never reach the model).</li>
+        <li><strong>Chat</strong> — type and the agent answers by <em>voice</em>; has a close button.</li>
+        <li><strong>Hang up</strong> — ends the call.</li>
+        <li><strong>Floating bubble</strong> — shrink the phone into a floating bubble that stays on screen so you can browse agents while you talk.</li>
+      </ul>
+      <p>You can also end calls hands-free: say <strong>"cut the call"</strong>, <strong>"khuda hafiz"</strong>, or just goodbye — the agent says farewell and hangs up itself.</p>
+      <div class="callout"><b>No mic? No problem.</b> If the microphone is blocked or missing, the call continues in chat mode — you type, the agent still answers by voice.</div>
+    </section>
+
+    <!-- ============================ 03 ============================ -->
+    <section class="dsec" id="agents">
+      <div class="dsec-head"><span class="dsec-num">03</span><h2>Agents</h2></div>
+      <h3>The 100 built-ins</h3>
+      <p>One hundred niche calling agents — a restaurant host, visa guide, interview coach, pharmacy assistant, chess coach, and 95 more — each with a fictional number from <span class="mono">+1 (555) 010-0001</span> to <span class="mono">+1 (555) 010-0100</span> that works only inside this app. Every agent has a gender-matched voice and its own AI portrait.</p>
+      <div class="callout"><b>Hard limits on sensitive roles.</b> Some agents carry baked-in guardrails: the salon booker never diagnoses, the legal assistant is not a lawyer, the pharmacy assistant gives general info only and refers to professionals. These are demos, not professional services.</div>
+      <h3>SymAgent — the 101st agent</h3>
+      <p>Sitting in the featured hero card above the directory is <strong>SymAgent</strong> (<span class="mono">+1 (555) 010-0101</span>) — the official AI representative of Symbiote Systems, the agency behind this platform. It knows the company's services (AI calling/voice agents, websites, AI chatbots, automation on Make/n8n), the portfolio, the socials, and the contact details — and it knows all 100 agents by name, niche, and number, because that directory is generated straight from the app's own code so it can never drift.</p>
+      <p>SymAgent won't talk pricing and won't book appointments — it informs, impresses, and captures leads. If a caller is interested, it collects name, email, phone, and the service they want, and saves it as a note for the team to follow up.</p>
+      <h3>Clickable link chips</h3>
+      <p>Ask SymAgent for socials, portfolio, or contact details and it drops <strong>clickable link chips</strong> into the in-call chat — Instagram, Threads, X, LinkedIn, Pinterest, Gumroad, the portfolio sites, client work (Aquifer Reach LLC), email, and WhatsApp. The URLs are server-side constants, so the model can never invent or inject its own links.</p>
+      <h3>Call transfer (SymAgent only)</h3>
+      <p>Talking to SymAgent about a specialist service? It offers to connect you. Say yes and it <strong>transfers you mid-call</strong> into a call with that specialist agent. Transfer works with built-in agents and your custom agents alike.</p>
+    </section>
+
+    <!-- ============================ 04 ============================ -->
+    <section class="dsec" id="custom-agents">
+      <div class="dsec-head"><span class="dsec-num">04</span><h2>Custom agents</h2></div>
+      <p>The <strong>Custom Agents</strong> page is where you build your own. Your custom agents live side-by-side with the built-ins — they're part of Symbiote Calling too, SymAgent knows about them, and it can transfer callers to them.</p>
+      <h3>The builder</h3>
+      <ul>
+        <li><strong>Name</strong> — required.</li>
+        <li><strong>Number</strong> — required; any random number works, it just has to be unique.</li>
+        <li><strong>Role</strong> — required; pick a niche or write your own custom role.</li>
+        <li><strong>Tone</strong> — pick from a few presets (e.g. professional, friendly) to shape how the agent speaks.</li>
+        <li><strong>Voice</strong> — the <strong>voice picker</strong> lets you audition and assign a voice.</li>
+        <li><strong>Prompt</strong> — optional custom instructions; start from a <strong>prompt template</strong> if you like.</li>
+        <li><strong>Profile picture</strong> — optional; use the <strong>avatar cropper</strong> to frame it, or leave it blank for the default caller avatar.</li>
+      </ul>
+      <p>There is <strong>no limit</strong> on how many you create. Custom agents are saved under your API-key profile, so the same key always reloads the same agents — and a different key never sees them.</p>
+      <h3>Clone an agent</h3>
+      <p>Found a built-in you like? <strong>Clone</strong> it to get a custom copy with the same voice and role, then tweak the name, prompt, or tone to make it yours.</p>
+    </section>
+
+    <!-- ============================ 05 ============================ -->
+    <section class="dsec" id="during-after-calls">
+      <div class="dsec-head"><span class="dsec-num">05</span><h2>During &amp; after calls</h2></div>
+      <h3>While you're talking</h3>
+      <ul>
+        <li><strong>In-call notes</strong> — jot down notes during the call; they're saved with that call's record.</li>
+        <li><strong>Recording</strong> — every call is recorded on your device (a red dot shows it's rolling). Recordings never leave your device.</li>
+        <li><strong>Chat &amp; keypad</strong> — covered in <a href="#making-calls">Making calls</a>.</li>
+      </ul>
+      <h3>After you hang up</h3>
+      <p>Open the call in <strong>History</strong> (agent, number, time, duration) — its detail view holds everything the call produced:</p>
+      <ul>
+        <li><strong>Auto summary</strong> — a short AI summary (a few lines + the outcome) is generated after each call, free and in the background, never blocking anything.</li>
+        <li><strong>Recording download / delete</strong> — play it back, keep it, or delete it.</li>
+        <li><strong>Transcript download &amp; search</strong> — download the full transcript or search inside it.</li>
+        <li><strong>Call back</strong> — one tap calls the agent again.</li>
+      </ul>
+      <p>History also has <strong>filters</strong> so you can narrow calls by agent or date range, and the dashboard shows your <strong>recent calls</strong> at a glance.</p>
+    </section>
+
+    <!-- ============================ 06 ============================ -->
+    <section class="dsec" id="memory-persistence">
+      <div class="dsec-head"><span class="dsec-num">06</span><h2>Memory &amp; persistence</h2></div>
+      <h3>How memory works</h3>
+      <p>Agents remember you. Every call automatically saves two things to the <strong>Memory</strong> page:</p>
+      <ul>
+        <li><strong>Notes</strong> — appointments, facts, and lead details the agent records during the call.</li>
+        <li><strong>The full transcript</strong> — everything said on both sides.</li>
+      </ul>
+      <p>When you call the same agent again, its recent memories are injected into its prompt — so it picks up where you left off. Open any memory for the full detail view.</p>
+      <h3>Your data belongs to your key</h3>
+      <p>Memories and history are tied to your API key <em>by hash</em> — the key itself is never stored, only a fingerprint of it. Change the key and everything resets cleanly, so keys never cross-contaminate.</p>
+      <h3>Keeping data across redeploys (Railway)</h3>
+      <p>On Railway the filesystem is wiped on every redeploy, so point the app at a persistent volume:</p>
+      <ol class="steps">
+        <li>Railway dashboard → your service → <strong>Volumes</strong> → <strong>Add volume</strong>, mount path <span class="mono">/data</span>.</li>
+        <li>Same service → <strong>Variables</strong> → add <span class="mono">DATA_DIR=/data</span>.</li>
+        <li>Redeploy. History and memories now survive updates.</li>
+      </ol>
+      <div class="callout warn"><b>Tip:</b> before any big change, go to <strong>Memory → Download backup (JSON)</strong> for a local copy. <strong>Restore</strong> puts it back. Until you do the volume step, a redeploy wipes everything — that will look like a bug if you forget.</div>
+      <p>The app also runs <strong>auto-cleanup</strong> in the background so old data doesn't pile up forever, and an <strong>audit log</strong> records key data events for your own peace of mind.</p>
+    </section>
+
+    <!-- ============================ 07 ============================ -->
+    <section class="dsec" id="dashboard-stats">
+      <div class="dsec-head"><span class="dsec-num">07</span><h2>Dashboard &amp; stats</h2></div>
+      <p>The <strong>dashboard</strong> is your home screen after login: live stat cards, your top 5 most-called agents, and recent calls.</p>
+      <table>
+        <tr><th>Stat</th><th>What it counts</th></tr>
+        <tr><td>Total calls</td><td>Every call you made</td></tr>
+        <tr><td>Minutes talked</td><td>Sum of call durations</td></tr>
+        <tr><td>Leads captured</td><td>Notes saved by SymAgent (lead details)</td></tr>
+        <tr><td>Top agents</td><td>Your 5 most-called agents, with counts</td></tr>
+      </table>
+      <p><strong>Per-agent stats</strong> break it down further: calls, minutes, and notes per agent. <strong>Usage metering</strong> tracks your calling activity, and <strong>quota timer alerts</strong> warn you before a long session eats into your API quota.</p>
+    </section>
+
+    <!-- ============================ 08 ============================ -->
+    <section class="dsec" id="deploying-railway">
+      <div class="dsec-head"><span class="dsec-num">08</span><h2>Deploying on Railway</h2></div>
+      <ol class="steps">
+        <li>Push the repo to GitHub (<span class="mono">npm test</span> first — the suite runs with zero dependencies).</li>
+        <li>Create a Railway project from that repo — it deploys the Node server automatically.</li>
+        <li><strong>Auto-deploy is on:</strong> every push to the connected branch redeploys, no manual step needed.</li>
+        <li>Set env vars in the service's <strong>Variables</strong>:
+          <ul>
+            <li><span class="mono">DATA_DIR=/data</span> — with a volume mounted at <span class="mono">/data</span> (see <a href="#memory-persistence">Memory &amp; persistence</a>).</li>
+            <li><span class="mono">GEMINI_API_KEY</span> — optional. If set, the server has a fallback key; in practice each user enters their own key in the app, so this can stay empty.</li>
+          </ul>
+        </li>
+      </ol>
+      <div class="callout"><b>Why not serverless?</b> A voice call needs one permanent open line held the whole time (browser → server → Google, via WebSocket). Serverless functions wake, answer once, and sleep — they can't hold that line. That's why the app runs as one always-on service.</div>
+    </section>
+
+    <!-- ============================ 09 ============================ -->
+    <section class="dsec" id="troubleshooting">
+      <div class="dsec-head"><span class="dsec-num">09</span><h2>Troubleshooting</h2></div>
+      <h3>No greeting yet — the agent stays silent?</h3>
+      <p>Honest answer: <strong>greeting behavior is under active improvement.</strong> The app sends a greeting trigger on connect, nudges the model once if it stays silent, and holds your mic closed until the greeting audio lands so you don't talk over it. If the agent still doesn't greet first, say something or type in chat — it will respond. If it happens on every call with every agent, let the team know: it's the bug we're chasing hardest.</p>
+      <h3>Mic blocked or missing</h3>
+      <p>Check Settings → mic default, and your browser's site permissions. Either way, calls fall back to chat mode automatically — you type, the agent answers by voice.</p>
+      <h3>Key issues</h3>
+      <ul>
+        <li><strong>"No key entered"</strong> — the app can't start a call without a key; paste one in Settings.</li>
+        <li><strong>"Key changed"</strong> — memories and history are key-scoped, so switching keys shows a fresh slate. Your old data is untouched, tied to the old key.</li>
+        <li><strong>Quota errors</strong> — the key's Gemini quota is exhausted; wait for it to reset or use another key profile.</li>
+      </ul>
+      <h3>Other hiccups</h3>
+      <ul>
+        <li><strong>Choppy audio</strong> — on a hosted tunnel the voice path can degrade; on the deployed server it should be clean. Check your connection first.</li>
+        <li><strong>"Search unavailable"</strong> — the agent's web search runs a 4-provider chain (DuckDuckGo instant → Wikipedia → Google News → DDG web). If all four are blocked, it says so rather than inventing answers. Try again later.</li>
+        <li><strong>Recording missing/empty</strong> — the mic was likely denied; allow it and call again.</li>
+        <li><strong>Double greeting after transfer</strong> — report it; transfers should hand you over with a single greeting.</li>
+      </ul>
+    </section>
+
+    <!-- ============================ 10 ============================ -->
+    <section class="dsec" id="faq">
+      <div class="dsec-head"><span class="dsec-num">10</span><h2>FAQ</h2></div>
+      <dl class="faq">
+        <dt>Is this a real phone network? Can I call real numbers?</dt>
+        <dd>No. The <span class="mono">+1 (555)</span> numbers are fictional and work only inside the app. This is a demo, not a phone company, emergency service, or medical/legal/financial provider.</dd>
+        <dt>Where does my API key go?</dt>
+        <dd>Into server memory for the call only. Never stored, never logged, never in a URL. Data is keyed to your key by hash, so only you see your history.</dd>
+        <dt>Can I use it without a microphone?</dt>
+        <dd>Yes — chat mode. Type your messages; the agent still answers by voice.</dd>
+        <dt>Are my calls recorded?</dt>
+        <dd>On your device, for you. Recordings and transcripts never leave your device except into your own memory/backup — which is also yours.</dd>
+        <dt>Can I make my own agents?</dt>
+        <dd>Yes — the Custom Agents page (name, number, role, tone, voice, prompt, avatar), unlimited, saved per key. SymAgent even knows about them and can transfer callers to them.</dd>
+        <dt>Does my data survive redeploys?</dt>
+        <dd>Yes, if you did the <span class="mono">DATA_DIR=/data</span> volume step. Otherwise redeploys wipe it — keep a JSON backup from the Memory page.</dd>
+        <dt>Why does SymAgent ask for my details instead of answering a question?</dt>
+        <dd>That's its job: it's the company rep. It informs and captures leads (name, email, phone, service) for the team to follow up.</dd>
+        <dt>Why won't it discuss pricing?</dt>
+        <dd>By design — SymAgent doesn't talk pricing or book appointments. It connects interested callers with the team instead.</dd>
+      </dl>
+    </section>
+
+  </main>
+</div>
+
+<footer class="note">Symbiote Calling · <a href="index.html" style="color:var(--acc)">← Back to the app</a></footer>
+
+<script>
+/* Match the app's theme choice (symbiote-theme in localStorage). */
+(function () {
+  var btn = document.getElementById('docsTheme');
+  function apply(t) { document.documentElement.setAttribute('data-theme', t); }
+  try { apply(localStorage.getItem('symbiote-theme') || 'light'); } catch (e) {}
+  btn.addEventListener('click', function () {
+    var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    apply(t);
+    try { localStorage.setItem('symbiote-theme', t); } catch (e) {}
+  });
+  /* Highlight TOC entry for the section in view. */
+  var links = Array.prototype.slice.call(document.querySelectorAll('#tocList a'));
+  var secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  function onScroll() {
+    var y = window.scrollY + 140, cur = secs[0];
+    secs.forEach(function (s) { if (s.offsetTop <= y) cur = s; });
+    links.forEach(function (a) { a.classList.toggle('on', a.getAttribute('href') === '#' + cur.id); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+/* public/directory.css — v7.0.0 WS4 "Directory UX" styles.
+ * Light theme by default; accent driven by --acc (already themed in styles.css).
+ */
+
+/* ---------- toolbar: search + filters ---------- */
+.dir-wrap{display:flex;flex-direction:column;gap:.8rem}
+.dir-toolbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.dir-search-wrap{position:relative;flex:1;min-width:180px;max-width:340px}
+.dir-search{width:100%;font:inherit;background:var(--panel);border:1px solid var(--line2);
+  color:var(--ink);border-radius:11px;padding:.62rem .8rem}
+.dir-search::placeholder{color:var(--muted)}
+.dir-search:focus{outline:2px solid var(--ring);outline-offset:1px}
+.dir-filter{font:inherit;background:var(--panel);border:1px solid var(--line2);
+  color:var(--ink);border-radius:11px;padding:.6rem .7rem;cursor:pointer}
+.dir-filter:focus{outline:2px solid var(--ring);outline-offset:1px}
+
+/* ---------- card grid ---------- */
+.dir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.8rem}
+.dir-card{cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.dir-card.swiping{border-color:var(--acc);box-shadow:0 14px 30px -18px rgba(109,40,217,.5)}
+.dir-card.custom{border-style:dashed}
+.dir-swipe-hint{margin-top:.15rem;opacity:.75}
+
+/* ---------- profile sheet (bottom modal) ---------- */
+.dir-sheet-veil{position:fixed;inset:0;background:rgba(20,12,40,.45);
+  display:flex;align-items:flex-end;justify-content:center;z-index:200;
+  opacity:0;transition:opacity .22s ease}
+.dir-sheet-veil.open{opacity:1}
+.dir-sheet{width:100%;max-width:520px;background:var(--panel);color:var(--ink);
+  border-radius:20px 20px 0 0;padding:1.3rem 1.3rem 1.5rem;box-shadow:var(--shadow);
+  transform:translateY(30px);transition:transform .22s ease;max-height:85vh;overflow-y:auto}
+.dir-sheet-veil.open .dir-sheet{transform:translateY(0)}
+.dir-sheet-head{display:flex;gap:1rem;align-items:center;margin-bottom:1rem}
+.dir-sheet-avatar{width:84px;height:84px;font-size:2rem}
+.dir-sheet-name{font-size:1.35rem;font-weight:700}
+.dir-sheet-niche{font-size:.9rem;color:var(--muted)}
+.dir-sheet-num{font-size:.85rem;color:var(--acc2);margin-top:.2rem}
+.dir-sheet-meta{display:flex;flex-direction:column;gap:.25rem;margin-bottom:1rem;
+  font-size:.88rem}
+.dir-sheet-stats{display:flex;gap:.6rem;margin-bottom:1.1rem}
+.dir-sheet-stat{flex:1;background:var(--acc-soft);border:1px solid var(--line);
+  border-radius:12px;padding:.6rem .4rem;text-align:center}
+.dir-sheet-stat-num{font-weight:700;font-size:1.05rem;color:var(--acc);
+  overflow:hidden;text-overflow:ellipsis}
+.dir-sheet-stat-lbl{font-size:.68rem;color:var(--muted);margin-top:.15rem}
+.dir-sheet-actions{display:flex;gap:.6rem}
+.dir-sheet-actions .btn{flex:1;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.dir-avatar-fallback{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:1.3rem;color:#fff;background:var(--acc);border-radius:50%}
+
+@media(max-width:560px){
+  .dir-sheet-actions{flex-direction:column}
+  .dir-sheet-stats{flex-wrap:wrap}
+}

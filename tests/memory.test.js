@@ -41,18 +41,40 @@ module.exports = {
     assert.ok(rec[0].notes[0].indexOf('second') !== -1, 'newest first');
     assert.strictEqual(m.recall('ava', kh, 3).length, 0, 'other agent excluded');
   },
-  'key change wipes memories (ensureScope reset)': async function () {
-    var m = tmpMemory();
-    var khA = m.keyHash('KEY-A');
-    var r1 = await m.ensureScope(khA);
-    assert.strictEqual(r1.reset, false);
-    var id = await m.beginCall({ keyHash: khA, agentId: 'ava', agentName: 'Ava', number: 'x' });
+  'per-key partitions: key switch never wipes, data stays isolated': async function () {
+    var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+    var khA = 'a'.repeat(64), khB = 'b'.repeat(64);
+    var mA = new memoryMod.MemoryStore(dir, khA);
+    var id = await mA.beginCall({ keyHash: khA, agentId: 'ava', agentName: 'Ava', number: 'x' });
+    await mA.endCall(id);
+    assert.strictEqual(mA.list(khA).length, 1);
+    var r1 = await mA.ensureScope(khA);
+    assert.strictEqual(r1.reset, false, 'partitioned store never wipes');
+    // a different key gets its own empty partition — nothing is destroyed
+    var mB = new memoryMod.MemoryStore(dir, khB);
+    assert.strictEqual(mB.list(khB).length, 0, 'different key sees separate empty data');
+    var r2 = await mB.ensureScope(khB);
+    assert.strictEqual(r2.reset, false, 'no wipe on key switch');
+    await mB.beginCall({ keyHash: khB, agentId: 'ava', agentName: 'Ava', number: 'x' });
+    // switching back: the original data is intact
+    var mA2 = new memoryMod.MemoryStore(dir, khA);
+    assert.strictEqual(mA2.list(khA).length, 1, 'original key data intact after switch');
+    assert.strictEqual(new memoryMod.MemoryStore(dir, khB).list(khB).length, 1);
+    assert.ok(fs.existsSync(path.join(dir, 'memories_' + khA + '.json')), 'partitioned file');
+    assert.ok(!fs.existsSync(path.join(dir, 'memories.json')), 'no legacy shared file touched');
+  },
+  'legacy constructor keeps old single-file behavior (no keyHash)': async function () {
+    var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+    var m = new memoryMod.MemoryStore(dir);
+    var id = await m.beginCall({ keyHash: 'c'.repeat(64), agentId: 'ava', agentName: 'Ava', number: 'x' });
     await m.endCall(id);
-    assert.strictEqual(m.list(khA).length, 1);
-    var r2 = await m.ensureScope(m.keyHash('KEY-B'));
-    assert.strictEqual(r2.reset, true);
-    assert.strictEqual(m.list().length, 0, 'memories wiped on key change');
-    assert.strictEqual(m.getScope(), m.keyHash('KEY-B'));
+    assert.ok(fs.existsSync(path.join(dir, 'memories.json')), 'legacy file name kept');
+    assert.strictEqual(m.list().length, 1);
+  },
+  'constructor rejects malformed keyHash': async function () {
+    var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
+    assert.throws(function () { new memoryMod.MemoryStore(dir, 'not-a-hash'); }, /64 hex/);
+    assert.throws(function () { new memoryMod.MemoryStore(dir, 'a'.repeat(63)); }, /64 hex/);
   },
   'list hides other-key memories; remove + clear work': async function () {
     var m = tmpMemory();

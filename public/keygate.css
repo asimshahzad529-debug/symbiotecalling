@@ -1,0 +1,142 @@
+/* public/keygate.css — v7 key-gating: login overlay + key switcher.
+ * Light theme default. Accent is exposed as --kg-accent (defaults to the
+ * app --acc) so WS7's accent picker can recolor keygate UI with one var. */
+:root{
+  --kg-accent: var(--acc, #6d28d9);
+  --kg-accent-soft: var(--acc-soft, rgba(109,40,217,.1));
+  --kg-card: var(--panel, #ffffff);
+  --kg-ink: var(--ink, #211d15);
+  --kg-muted: var(--muted, #7c7565);
+  --kg-line: var(--line, #e4ddcb);
+  --kg-err: var(--err, #b91c1c);
+}
+
+/* while gated, the whole app chrome stays hidden behind the login */
+body.kg-gated #main,
+body.kg-gated .topbar{ display:none !important; }
+
+.kg-overlay{
+  position:fixed; inset:0; z-index:200;
+  display:flex; align-items:center; justify-content:center;
+  padding:1.2rem;
+  background:
+    radial-gradient(700px 380px at 50% -6%, var(--kg-accent-soft), transparent 65%),
+    var(--bg, #f7f4ec);
+  animation:kg-fade .25s ease;
+}
+@keyframes kg-fade{ from{ opacity:0 } to{ opacity:1 } }
+
+.kg-card{
+  width:min(430px, 100%);
+  background:var(--kg-card);
+  border:1px solid var(--kg-line);
+  border-radius:20px;
+  box-shadow:0 30px 70px -30px rgba(33,29,21,.35);
+  padding:2rem 1.8rem 1.6rem;
+  animation:kg-rise .3s ease;
+}
+@keyframes kg-rise{ from{ opacity:0; transform:translateY(10px) } to{ opacity:1; transform:none } }
+
+.kg-brand{
+  font-family:"Space Grotesk",sans-serif; font-weight:700; font-size:1.05rem;
+  margin-bottom:1.1rem;
+}
+.kg-brand em{ font-style:normal; color:var(--kg-accent); }
+.kg-sigil{ color:var(--kg-accent); }
+
+.kg-title{ font-size:1.45rem; margin:.1em 0 .3em; }
+.kg-sub{ color:var(--kg-muted); font-size:.9rem; margin:0 0 1.1rem; }
+
+.kg-label{
+  display:block; font-size:.78rem; font-weight:600; color:var(--kg-muted);
+  margin:.9rem 0 .35rem; letter-spacing:.02em;
+}
+.kg-input{
+  width:100%; font:inherit; color:var(--kg-ink);
+  background:var(--panel2, #f4f0e4);
+  border:1px solid var(--kg-line); border-radius:11px;
+  padding:.65rem .8rem; outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+.kg-input:focus{ border-color:var(--kg-accent); box-shadow:0 0 0 3px var(--kg-accent-soft); }
+
+.kg-error{
+  margin-top:.7rem; font-size:.85rem; color:var(--kg-err);
+  background:color-mix(in srgb, var(--kg-err) 8%, transparent);
+  border:1px solid color-mix(in srgb, var(--kg-err) 30%, transparent);
+  border-radius:9px; padding:.5rem .7rem;
+}
+.kg-error[hidden]{ display:none; }
+
+.kg-unlock{
+  width:100%; margin-top:1.1rem; padding:.75rem;
+  font:inherit; font-weight:700; font-size:.95rem; cursor:pointer;
+  color:#fff; background:var(--kg-accent); border:none; border-radius:12px;
+  transition:transform .12s, filter .15s;
+}
+.kg-unlock:hover{ filter:brightness(1.07); }
+.kg-unlock:active{ transform:scale(.98); }
+.kg-unlock:disabled{ opacity:.6; cursor:wait; }
+
+.kg-getkey{
+  display:block; text-align:center; margin-top:.9rem;
+  font-size:.85rem; color:var(--kg-accent); text-decoration:none; font-weight:600;
+}
+.kg-getkey:hover{ text-decoration:underline; }
+
+/* saved-key rows (overlay + switcher) */
+.kg-profiles{ margin-bottom:.4rem; }
+.kg-profiles:empty{ display:none; }
+.kg-profiles-title{ font-size:.78rem; font-weight:600; color:var(--kg-muted); margin:.2rem 0 .45rem; }
+.kg-profile-row{
+  display:flex; align-items:center; gap:.7rem;
+  border:1px solid var(--kg-line); border-radius:11px;
+  padding:.55rem .7rem; margin-bottom:.45rem;
+  background:var(--panel2, #f4f0e4);
+}
+.kg-profile-meta{ flex:1; min-width:0; }
+.kg-profile-label{ font-weight:600; font-size:.9rem; }
+.kg-profile-hash{ font-size:.72rem; color:var(--kg-muted); }
+
+.kg-btn{
+  font:inherit; font-size:.82rem; font-weight:600; cursor:pointer;
+  color:var(--kg-accent); background:var(--kg-accent-soft);
+  border:1px solid transparent; border-radius:9px; padding:.4rem .75rem;
+  white-space:nowrap;
+}
+.kg-btn:hover{ border-color:var(--kg-accent); }
+.kg-btn.danger{ color:var(--kg-err); background:transparent; border-color:var(--kg-line); }
+.kg-btn.danger:hover{ border-color:var(--kg-err); }
+.kg-active-tag{
+  font-size:.72rem; font-weight:700; color:var(--kg-accent);
+  background:var(--kg-accent-soft); border-radius:20px; padding:.2rem .6rem;
+}
+
+/* switcher modal */
+.kg-modal{
+  position:fixed; inset:0; z-index:210;
+  display:flex; align-items:center; justify-content:center; padding:1.2rem;
+  background:rgba(20,16,10,.45); backdrop-filter:blur(3px);
+  animation:kg-fade .2s ease;
+}
+.kg-card.kg-switcher{ width:min(480px, 100%); }
+.kg-switcher-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:.3rem; }
+.kg-switcher-head h3{ margin:0; }
+.kg-x{
+  width:32px; height:32px; border-radius:9px; cursor:pointer;
+  background:var(--panel2, #f4f0e4); border:1px solid var(--kg-line);
+  color:var(--kg-muted); font-size:1.1rem; line-height:1;
+}
+.kg-x:hover{ color:var(--kg-ink); }
+.kg-switcher-list{ margin:.8rem 0; max-height:40vh; overflow:auto; }
+.kg-switcher-foot{ display:flex; gap:.6rem; justify-content:flex-end; margin-top:.4rem; }
+
+@media (max-width:520px){
+  .kg-card{ padding:1.5rem 1.2rem 1.2rem; }
+}
+
+[data-theme="dark"] .kg-overlay{
+  background:
+    radial-gradient(700px 380px at 50% -6%, var(--kg-accent-soft), transparent 65%),
+    var(--bg, #0b0b11);
+}

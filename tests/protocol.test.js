@@ -234,22 +234,34 @@ module.exports = {
     ws.emitMsg({ type: 'hangup' });
     await tick(4);
   },
-  'key change wipes memories and history': async function () {
-    var sdk = fakeSdk(), history = tmpHistory(), memory = tmpMemory();
-    var ws1 = newBridgeFull(sdk, history, memory, { type: 'setup', apiKey: 'KEY-A', agentId: 'ava' });
+  'v7: key change isolates (never wipes) memories and history': async function () {
+    // v7 key gating: per-key partitions - a different key gets its own
+    // history/memory files; switching keys can never destroy data.
+    var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'keyed-proto-'));
+    var sdk = fakeSdk();
+    var khA = bridgeMod.keyHashOf('KEY-A'), khB = bridgeMod.keyHashOf('KEY-B');
+    var ws1 = newBridgeFull(sdk, tmpHistory(), tmpMemory(),
+      { type: 'setup', apiKey: 'KEY-A', agentId: 'ava' }, { dataDir: dir });
     await tick(6);
     sdk._sessions[0].callbacks.onmessage({ setupComplete: {} });
     await tick(6);
     ws1.emitMsg({ type: 'hangup' });
     await tick(8);
-    assert.strictEqual(memory.list().length, 1);
-    assert.strictEqual(history.list().length, 1);
-    var ws2 = newBridgeFull(sdk, history, memory, { type: 'setup', apiKey: 'KEY-B', agentId: 'ava' });
+    assert.strictEqual(new storeMod.CallHistory(dir, khA).list().length, 1, 'KEY-A history in its partition');
+    assert.strictEqual(new memoryMod.MemoryStore(dir, khA).list().length, 1, 'KEY-A memories in its partition');
+    var ws2 = newBridgeFull(sdk, tmpHistory(), tmpMemory(),
+      { type: 'setup', apiKey: 'KEY-B', agentId: 'ava' }, { dataDir: dir });
     await tick(8);
-    assert.strictEqual(memory.list().length, 0, 'memories wiped on key change');
-    assert.strictEqual(history.list().length, 0, 'history wiped on key change');
+    // KEY-A's data survives the key switch - no wipe.
+    assert.strictEqual(new storeMod.CallHistory(dir, khA).list().length, 1, 'KEY-A history survives key switch');
+    assert.strictEqual(new memoryMod.MemoryStore(dir, khA).list().length, 1, 'KEY-A memories survive key switch');
     assert.strictEqual(sdk._connects.length, 2, 'new key still connects fine');
+    sdk._sessions[1].callbacks.onmessage({ setupComplete: {} });
+    await tick(6);
     ws2.emitMsg({ type: 'hangup' });
-    await tick(4);
-  }
+    await tick(8);
+    assert.strictEqual(new storeMod.CallHistory(dir, khB).list().length, 1, 'KEY-B history in its own partition');
+    assert.strictEqual(new memoryMod.MemoryStore(dir, khB).list().length, 1, 'KEY-B memories in its own partition');
+    assert.ok(!fs.existsSync(path.join(dir, 'calls.json')), 'legacy shared file untouched');
+  },
 };

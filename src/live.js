@@ -19,6 +19,7 @@
 var prompt = require('./prompt');
 var search = require('./search');
 var agents = require('./agents');
+var customAgents = require('./customAgents');
 
 var BACKOFFS = [5000, 10000, 20000, 40000];
 
@@ -110,12 +111,23 @@ function linksForSet(set) {
  * Returns { ok:true, target:{id,name,number,niche} } or { ok:false, error }.
  * Rejects: missing/empty args, unknown agent id or number, self-transfer.
  */
-function resolveTransferTarget(args) {
+function resolveTransferTarget(args, ctx) {
   if (!args || typeof args !== 'object') return { ok: false, error: 'missing arguments: pass agentId or number' };
   var id = args.agentId ? String(args.agentId).trim() : '';
   var number = args.number ? String(args.number).trim() : '';
   if (!id && !number) return { ok: false, error: 'missing arguments: pass agentId or number' };
   var target = id ? agents.getById(id) : agents.getByNumber(number);
+  // v7: after the built-in lookup fails, fall back to the caller's custom
+  // agents (per-key store). Custom agents never carry transfer_call
+  // themselves (toolNamesFor stays SymAgent-only), but SymAgent CAN hand
+  // a caller to them.
+  if (!target && ctx && ctx.customStore) {
+    var custom = customAgents.findTarget(ctx.customStore, ctx.keyHash, id || number);
+    if (custom) {
+      if (custom.id === 'symagent') return { ok: false, error: 'cannot transfer to yourself' };
+      return { ok: true, target: { id: custom.id, name: custom.name, number: custom.number, niche: custom.role } };
+    }
+  }
   if (!target) return { ok: false, error: id ? 'unknown agent id: ' + id.slice(0, 40) : 'unknown number: ' + number.slice(0, 40) };
   if (target.id === 'symagent') return { ok: false, error: 'cannot transfer to yourself' };
   return { ok: true, target: { id: target.id, name: target.name, number: target.number, niche: target.niche } };
@@ -125,6 +137,66 @@ function resolveTransferTarget(args) {
 function toolNamesFor(agentId) {
   var fakeType = { OBJECT: 'OBJECT', STRING: 'STRING' };
   return toolDeclarations(fakeType, agentId).map(function (d) { return d.name; });
+}
+
+/* ---------------------------------------------------------------------------
+ * WS3 GREETING FIX (v7.0.0) — pure greeting-handshake helpers.
+ *
+ * P0 bug: on real calls no agent ever greets first; the old trigger turn
+ * produced no model output. UNVERIFIED-LIVE: with no live API key available
+ * we cannot prove WHY (candidates: bracketed phrasing parsed as meta, text
+ * turn racing session readiness, AUDIO-only session ignoring text turns).
+ * These helpers are pure and unit-tested; the live behavior they assume is
+ * marked UNVERIFIED-LIVE wherever it matters.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Direct-instruction trigger phrasing (T+0). Deliberately NOT bracketed:
+ * UNVERIFIED-LIVE, but bracketed text looks like a meta-instruction a model
+ * may silently acknowledge instead of speaking, so a plain imperative is
+ * the more robust bet.
+ */
+function greetingTriggerText(agentName) {
+  return 'Greet the caller now with a brief hello as ' + agentName + '.';
+}
+
+/** Variant phrasing for the single ~6s retry (must differ from the trigger). */
+function greetingRetryText(agentName) {
+  return 'Please say your greeting now, ' + agentName + '.';
+}
+
+/**
+ * Classify the first model output of a greeting handshake.
+ * Returns null when the message carries no model output, else
+ * { kind: 'audio' }            — modelTurn part with inlineData (spoken audio)
+ * { kind: 'text', text }       — modelTurn text part or outputTranscription
+ *                                (degraded: the model "spoke" but no audio)
+ * { kind: 'tool', text: null } — bare toolCall (model is alive, no speech yet)
+ * UNVERIFIED-LIVE: with AUDIO modality + outputAudioTranscription the first
+ * output may be a transcription frame before any audio frame; kind 'text'
+ * then correctly describes what the client can show.
+ */
+function greetingClassifyOutput(message) {
+  if (!message || typeof message !== 'object') return null;
+  if (message.toolCall) return { kind: 'tool', text: null };
+  var sc = message.serverContent;
+  if (!sc || typeof sc !== 'object') return null;
+  var mt = sc.modelTurn;
+  if (mt && mt.parts && mt.parts.length) {
+    var i, p;
+    for (i = 0; i < mt.parts.length; i++) {
+      p = mt.parts[i];
+      if (p && p.inlineData && p.inlineData.data) return { kind: 'audio', text: null };
+    }
+    for (i = 0; i < mt.parts.length; i++) {
+      p = mt.parts[i];
+      if (p && p.text) return { kind: 'text', text: p.text };
+    }
+    return { kind: 'text', text: '' };
+  }
+  if (mt) return { kind: 'text', text: '' }; // bare modelTurn: output of unknown kind
+  if (sc.outputTranscription) return { kind: 'text', text: sc.outputTranscription.text || '' };
+  return null;
 }
 
 /**
@@ -144,6 +216,8 @@ function createOmniSession(opts) {
     systemInstruction: opts.systemInstruction || null,
     agentName: opts.agentName || null,
     agentId: opts.agentId || null,
+    keyHash: opts.keyHash || null,         // v7: transfer_call custom-agent fallback
+    customStore: opts.customStore || null, // v7: per-key custom agent store
     session: null,
     setupConfirmed: false,
     greeted: false,
@@ -152,6 +226,11 @@ function createOmniSession(opts) {
     resumeSupported: false,
     backoffIdx: 0,
     reconnectTimer: null,
+    // WS3 greeting handshake state machine: idle -> trigger_sent ->
+    // (audio_received | text_received | failed). Diag counters live here.
+    greetHs: { phase: 'idle', triggerSentAt: 0, retrySentAt: 0, firstOutputAt: 0, outputKind: null },
+    _greetRetryTimer: null,
+    _greetFailTimer: null,
     diag: { framesToGoogle: 0, framesFromGoogle: 0, toolCalls: 0, turns: 0 }
   };
 
@@ -160,7 +239,20 @@ function createOmniSession(opts) {
   function liveConfig() {
     return {
       responseModalities: [sdk.Modality.AUDIO],
-      systemInstruction: state.systemInstruction || prompt.buildSystemInstruction(state.role),
+      // WS1 renamed prompt.buildSystemInstruction -> buildAgentInstruction;
+      // the fallback here builds a minimal agent so a session started
+      // without an explicit instruction (bridge always passes one) still
+      // gets a valid prompt.
+      systemInstruction: state.systemInstruction || prompt.buildAgentInstruction({
+        id: state.agentId || 'agent',
+        name: state.agentName || 'Assistant',
+        gender: null,
+        niche: state.role,
+        number: '',
+        voice: state.voice,
+        prompt: '',
+        knowledge: null
+      }, null),
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: state.voice } } },
       tools: [{ functionDeclarations: toolDeclarations(sdk.Type, state.agentId) }],
       inputAudioTranscription: {},
@@ -207,10 +299,12 @@ function createOmniSession(opts) {
 
   function handleMessage(message) {
     if (!message || state.closed) return;
-    // Any model output cancels the greeting watchdog.
-    if (message.toolCall || (message.serverContent && (message.serverContent.modelTurn || message.serverContent.outputTranscription))) {
+    // WS3: any model output resolves the greeting handshake (audio vs
+    // text-only distinguished) and cancels the retry/fail timers.
+    var _greetOut = greetingClassifyOutput(message);
+    if (_greetOut) {
       state._gotModelOutput = true;
-      if (state._greetTimer) { clearTimeout(state._greetTimer); state._greetTimer = null; }
+      greetResolve(_greetOut.kind, _greetOut.text);
     }
     try {
       if (message.setupComplete && !state.setupConfirmed) {
@@ -218,27 +312,43 @@ function createOmniSession(opts) {
         state.backoffIdx = 0;
         emit({ type: 'setup_complete', model: state.model, resumed: !!state._resumed });
         state._resumed = false;
+        /* -------------------------------------------------------------
+         * WS3 GREETING HANDSHAKE — CONTRACT FOR INTEGRATOR
+         * (no server.js changes needed; events below ride the existing
+         * session onEvent channel which the bridge already forwards.)
+         *
+         * Event names / payloads:
+         *  {type:'greeting_state', state:'trigger_sent',
+         *   detail:{attempt:1}}
+         *  {type:'greeting_state', state:'retry_sent',
+         *   detail:{attempt:2}}
+         *  {type:'greeting_state', state:'audio_received',
+         *   detail:{outputKind:'audio', latencyMs:<ms since trigger>}}
+         *  {type:'greeting_state', state:'text_received',
+         *   detail:{outputKind:'text', latencyMs:<n>, text:'<first 300 chars>'}}
+         *  {type:'greeting_state', state:'failed',
+         *   detail:{outputKind:null, latencyMs:<n>}}
+         *  {type:'greeting_text_only', text:'<full text>'}
+         *    — degraded success (no audio frames); render as a transcript bubble.
+         *  {type:'greeting_failed', hint:'Say hello to begin'}
+         *    — silence after ~12s; the client mic already ungates itself,
+         *      show the hint so the caller speaks first.
+         *
+         * Client display mapping:
+         *  trigger_sent / retry_sent -> "greeting…" / connecting indicator
+         *  audio_received            -> normal call UI (audio is playing)
+         *  text_received / greeting_text_only -> transcript bubble with the text
+         *  failed / greeting_failed  -> "Say hello to begin" hint
+         *
+         * Guarantees: exactly one trigger per fresh session (greeted flag;
+         * none after resume); at most one retry; fail is terminal. Timings:
+         * retry = opts.greetingNudgeMs || 6000, fail = opts.greetingFailMs
+         * || 12000 (UNVERIFIED-LIVE: values are engineering guesses —
+         * real greeting latency needs a live-key measurement).
+         * ----------------------------------------------------------- */
         if (!state.greeted) {
           state.greeted = true;
-          var who = state.agentName ? state.agentName : 'the assistant';
-          // Exactly one greeting trigger, sent as a completed text turn.
-          state.session.sendClientContent({
-            turns: [{ role: 'user', parts: [{ text: '[Call started — greet the caller now, briefly, as ' + who + ', in their language. Then wait.]' }] }],
-            turnComplete: true
-          });
-          // Watchdog: if the model produces no output at all, nudge once.
-          // (Covers edge cases where the first turn is silently swallowed.)
-          var nudgeMs = opts.greetingNudgeMs || 12000;
-          state._greetTimer = setTimeout(function () {
-            if (state.closed || state._gotModelOutput || !state.session) return;
-            try {
-              state.session.sendClientContent({
-                turns: [{ role: 'user', parts: [{ text: '[Please say your greeting now.]' }] }],
-                turnComplete: true
-              });
-              emit({ type: 'diag', note: 'greeting nudge sent' });
-            } catch (e) { /* ignore */ }
-          }, nudgeMs);
+          greetStart();
         }
         return;
       }
@@ -282,9 +392,85 @@ function createOmniSession(opts) {
     }
   }
 
+  /* WS3 greeting-handshake drivers (greeting block only; hoisted function
+   * declarations, called from handleMessage above). */
+
+  function greetEmit(st, detail) {
+    emit({ type: 'greeting_state', state: st, detail: detail || {} });
+  }
+
+  // Start the handshake on setupComplete: send the T+0 trigger, arm the
+  // single ~6s retry and the ~12s failure timer.
+  function greetStart() {
+    var hs = state.greetHs;
+    var who = state.agentName ? state.agentName : 'the assistant';
+    hs.phase = 'trigger_sent';
+    hs.triggerSentAt = Date.now();
+    try {
+      state.session.sendClientContent({
+        turns: [{ role: 'user', parts: [{ text: greetingTriggerText(who) }] }],
+        turnComplete: true
+      });
+    } catch (e) { /* transport send failed; timers below still report state */ }
+    greetEmit('trigger_sent', { attempt: 1 });
+    var retryMs = opts.greetingNudgeMs || 6000;
+    var failMs = opts.greetingFailMs || 12000;
+    if (failMs < retryMs) failMs = retryMs + 1000; // failure must come after the retry
+    state._greetRetryTimer = setTimeout(function () {
+      state._greetRetryTimer = null;
+      if (state.closed || !state.session || !state.greetHs || state.greetHs.phase !== 'trigger_sent') return;
+      state.greetHs.retrySentAt = Date.now();
+      try {
+        state.session.sendClientContent({
+          turns: [{ role: 'user', parts: [{ text: greetingRetryText(who) }] }],
+          turnComplete: true
+        });
+      } catch (e) { /* ignore */ }
+      greetEmit('retry_sent', { attempt: 2 });
+    }, retryMs);
+    state._greetFailTimer = setTimeout(function () {
+      state._greetFailTimer = null;
+      greetFail();
+    }, failMs);
+  }
+
+  // Resolve the handshake on first model output. Exactly-once: only the
+  // transition out of 'trigger_sent' counts; later frames are ignored.
+  function greetResolve(kind, text) {
+    var hs = state.greetHs;
+    if (!hs || hs.phase !== 'trigger_sent') return;
+    var now = Date.now();
+    hs.phase = (kind === 'audio') ? 'audio_received' : 'text_received';
+    hs.firstOutputAt = now;
+    hs.outputKind = kind;
+    if (state._greetRetryTimer) { clearTimeout(state._greetRetryTimer); state._greetRetryTimer = null; }
+    if (state._greetFailTimer) { clearTimeout(state._greetFailTimer); state._greetFailTimer = null; }
+    var detail = { outputKind: kind, latencyMs: now - hs.triggerSentAt };
+    if (text) detail.text = String(text).slice(0, 300);
+    greetEmit(hs.phase, detail);
+    if (kind !== 'audio' && text) {
+      // Degraded success: no audio frames, but the model produced text.
+      emit({ type: 'greeting_text_only', text: String(text).slice(0, 1000) });
+    }
+  }
+
+  // Terminal failure: silence past the fail budget. Sends nothing more to
+  // the model; the client ungates its mic on its own fallback and should
+  // show the 'Say hello to begin' hint.
+  function greetFail() {
+    var hs = state.greetHs;
+    if (!hs || hs.phase !== 'trigger_sent' || state.closed) return;
+    hs.phase = 'failed';
+    greetEmit('failed', { outputKind: null, latencyMs: Date.now() - hs.triggerSentAt });
+    emit({ type: 'greeting_failed', hint: 'Say hello to begin' });
+  }
+
   async function runTool(fc) {
     state.diag.toolCalls++;
-    var result = await executeTool(fc.name, fc.args || {}, { store: store, emit: emit });
+    var result = await executeTool(fc.name, fc.args || {}, {
+      store: store, emit: emit,
+      customStore: state.customStore, keyHash: state.keyHash
+    });
     try {
       state.session.sendToolResponse({ functionResponses: [{ name: fc.name, id: fc.id, response: result }] });
     } catch (e) {
@@ -354,11 +540,18 @@ function createOmniSession(opts) {
         state.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: '[SYSTEM] ' + text }] }], turnComplete: true });
       }
     },
-    getDiag: function () { return Object.assign({ model: state.model }, state.diag); },
+    getDiag: function () {
+      var g = state.greetHs;
+      return Object.assign({ model: state.model }, state.diag, {
+        greetingState: g.phase, triggerSentAt: g.triggerSentAt, retrySentAt: g.retrySentAt,
+        firstOutputAt: g.firstOutputAt, outputKind: g.outputKind
+      });
+    },
     hangup: function () {
       state.closed = true;
       if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
-      if (state._greetTimer) { clearTimeout(state._greetTimer); state._greetTimer = null; }
+      if (state._greetRetryTimer) { clearTimeout(state._greetRetryTimer); state._greetRetryTimer = null; }
+      if (state._greetFailTimer) { clearTimeout(state._greetFailTimer); state._greetFailTimer = null; }
       try { if (state.session) state.session.close(); } catch (e) {}
       state.session = null;
       state.apiKey = null; // key lives in memory only for the session
@@ -400,7 +593,7 @@ async function executeTool(name, args, ctx) {
       return { ok: true, shared: links.length };
     }
     if (name === 'transfer_call') {
-      var tr = resolveTransferTarget(args);
+      var tr = resolveTransferTarget(args, { customStore: ctx.customStore, keyHash: ctx.keyHash });
       if (!tr.ok) return { ok: false, error: tr.error };
       emit({ type: 'transfer_requested', target: tr.target });
       return { ok: true, transfer: tr.target, note: 'Say one brief handoff sentence, then say nothing more; the transfer is being connected.' };
@@ -411,4 +604,4 @@ async function executeTool(name, args, ctx) {
   }
 }
 
-module.exports = { createOmniSession: createOmniSession, executeTool: executeTool, BACKOFFS: BACKOFFS, resolveTransferTarget: resolveTransferTarget, toolNamesFor: toolNamesFor };
+module.exports = { createOmniSession: createOmniSession, executeTool: executeTool, BACKOFFS: BACKOFFS, resolveTransferTarget: resolveTransferTarget, toolNamesFor: toolNamesFor, greetingTriggerText: greetingTriggerText, greetingRetryText: greetingRetryText, greetingClassifyOutput: greetingClassifyOutput };

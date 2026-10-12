@@ -5,17 +5,35 @@
  * Only metadata is stored: which agent was called, when, and how long the
  * call lasted. No audio, no transcripts. Atomic writes (temp + rename),
  * serialized. Local demo data only — not a secure production system.
+ *
+ * v7 key gating: storage is PER-KEYHASH-PARTITIONED. Construct with the
+ * caller's keyHash (sha256 hex of their API key — the key itself is never
+ * stored) and this instance reads/writes DATA_DIR/calls_<keyHash>.json, so
+ * one key's history can never leak into another's and switching keys never
+ * wipes anything. Constructed WITHOUT a keyHash, it keeps the legacy
+ * single-file behavior (DATA_DIR/calls.json) — the pre-v7 shared instance
+ * used by server.js until the integrator wires per-key instances.
  */
 
 var fs = require('fs');
 var path = require('path');
 var crypto = require('crypto');
+var keystoreMod = require('./keystore');
+var cleanupMod = require('./cleanup');
 
-function CallHistory(dataDir) {
+function CallHistory(dataDir, keyHash) {
   this.dataDir = dataDir;
-  this.file = path.join(dataDir, 'calls.json');
+  // scopeKeyHash: when set, this instance reads/writes the per-key partition
+  // file; when null, the legacy shared calls.json (see header comment).
+  this.scopeKeyHash = keyHash == null ? null : keystoreMod.normalizeKeyHash(keyHash);
+  this.file = path.join(dataDir, this.scopeKeyHash ? 'calls_' + this.scopeKeyHash + '.json' : 'calls.json');
   this._queue = Promise.resolve();
 }
+
+/** Storage file name for a keyHash (null -> legacy shared file). Exposed for tests/docs. */
+CallHistory.fileNameFor = function (keyHash) {
+  return keyHash == null ? 'calls.json' : 'calls_' + keystoreMod.normalizeKeyHash(keyHash) + '.json';
+};
 
 CallHistory.prototype._ensureFile = function () {
   if (!fs.existsSync(this.dataDir)) fs.mkdirSync(this.dataDir, { recursive: true });
@@ -26,8 +44,8 @@ CallHistory.prototype._readAll = function () {
   this._ensureFile();
   var raw = fs.readFileSync(this.file, 'utf8');
   var arr;
-  try { arr = JSON.parse(raw); } catch (e) { throw new Error('calls.json is corrupt: ' + e.message); }
-  if (!Array.isArray(arr)) throw new Error('calls.json must contain an array');
+  try { arr = JSON.parse(raw); } catch (e) { throw new Error(path.basename(this.file) + ' is corrupt: ' + e.message); }
+  if (!Array.isArray(arr)) throw new Error(path.basename(this.file) + ' must contain an array');
   return arr;
 };
 
@@ -75,7 +93,7 @@ CallHistory.prototype.logEnd = async function (id) {
   });
 };
 
-/** Clear all history (user-confirmed in the UI). */
+/** Clear history for this instance's scope (one key's partition, or the legacy file). */
 CallHistory.prototype.clear = async function () {
   await this._atomic(function () { return { next: [] }; });
 };
@@ -99,6 +117,44 @@ CallHistory.prototype.setSummary = async function (id, summary) {
     if (e) e.summary = text;
     return { next: all };
   });
+};
+
+/**
+ * v7 auto-cleanup: drop call records whose startedAt is older than `days`.
+ * Records with no/invalid startedAt are kept. Returns the removed count.
+ */
+CallHistory.prototype.pruneOlderThan = async function (days) {
+  var removed = 0;
+  await this._atomic(function (all) {
+    var fresh = all.filter(function (r) {
+      var drop = r && typeof r === 'object' && cleanupMod.isOlderThan(r.startedAt, days);
+      if (drop) removed++;
+      return !drop;
+    });
+    return { next: fresh, result: removed };
+  });
+  return removed;
+};
+
+/**
+ * Prune every history partition under dataDir (legacy calls.json plus all
+ * calls_<keyHash>.json). Returns { files, removed }. Never throws on a
+ * corrupt partition — it is skipped so one bad file can't block cleanup.
+ */
+CallHistory.pruneAll = async function (dataDir, days) {
+  var out = { files: 0, removed: 0 };
+  var names;
+  try { names = fs.readdirSync(dataDir); }
+  catch (e) { return out; }
+  for (var i = 0; i < names.length; i++) {
+    if (!/^calls(_[0-9a-f]{64})?\.json$/.test(names[i])) continue;
+    out.files++;
+    try {
+      var h = new CallHistory(dataDir, names[i] === 'calls.json' ? null : names[i].slice(6, -5));
+      out.removed += await h.pruneOlderThan(days);
+    } catch (e) { /* skip corrupt partition */ }
+  }
+  return out;
 };
 
 module.exports = { CallHistory: CallHistory };

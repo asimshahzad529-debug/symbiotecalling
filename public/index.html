@@ -8,15 +8,22 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="keygate.css">
+<link rel="stylesheet" href="custom-agents.css">
+<link rel="stylesheet" href="directory.css">
+<link rel="stylesheet" href="callx.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand"><span class="sigil">◈</span> Symbiote <em>Calling</em></div>
   <nav class="tabs" id="tabs">
     <button data-view="agents" class="active" type="button">Agents</button>
+    <button data-view="customagents" type="button">Custom Agents</button>
+    <button data-view="dashboard" type="button">Dashboard</button>
     <button data-view="dialer" type="button">Dialer</button>
     <button data-view="history" type="button">History</button>
     <button data-view="memory" type="button">Memory</button>
+    <a class="tab-link" href="docs.html">Docs</a>
     <button data-view="settings" type="button">Settings</button>
   </nav>
   <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle dark / light mode"></button>
@@ -25,14 +32,22 @@
 <main id="main">
   <section class="view active" id="view-agents">
     <div class="view-head">
-      <div><h1>Calling agents</h1><p class="dim">100 specialists. Tap call — or dial their number.</p></div>
-      <div class="search-wrap">
-        <svg class="search-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
-        <input id="agentSearch" type="text" placeholder="Search agents…" autocomplete="off">
-      </div>
+      <div><h1>Calling agents</h1><p class="dim">101 specialists. Tap a card for the profile, swipe right to call.</p></div>
+    </div>
+    <div class="grid" id="agentGrid"></div>
+  </section>
+
+  <section class="view" id="view-customagents">
+    <div id="customAgentsRoot"></div>
+  </section>
+
+  <section class="view" id="view-dashboard">
+    <div class="view-head">
+      <div><h1>Dashboard</h1><p class="dim">Usage at a glance for your current key.</p></div>
     </div>
     <div class="stats" id="statsRow" aria-label="Usage statistics"></div>
-    <div class="grid" id="agentGrid"></div>
+    <h3>Recent calls</h3>
+    <div class="list" id="dashRecents"></div>
   </section>
 
   <section class="view" id="view-dialer">
@@ -50,6 +65,8 @@
         <span class="spacer"></span>
       </div>
       <p class="dim hint">Dial any agent number, e.g. +1 (555) 010-0001</p>
+      <h3 class="dial-recents-head">Recent</h3>
+      <div class="dial-results" id="dialRecents"></div>
     </div>
   </section>
 
@@ -57,6 +74,16 @@
     <div class="view-head">
       <div><h1>Call history</h1><p class="dim">Stored on this machine only — agent, number, time, duration.</p></div>
       <button class="btn ghost" id="clearHistory" type="button">Clear history</button>
+    </div>
+    <div class="hist-filters" id="histFilters">
+      <select id="histFilterAgent" aria-label="Filter by agent"><option value="any">All agents</option></select>
+      <input id="histFilterFrom" type="date" aria-label="From date">
+      <input id="histFilterTo" type="date" aria-label="To date">
+      <select id="histFilterStatus" aria-label="Filter by status">
+        <option value="any">All calls</option>
+        <option value="completed">Completed</option>
+        <option value="missed">Missed</option>
+      </select>
     </div>
     <div id="histDetail" class="hidden"></div>
     <div class="list" id="historyList"></div>
@@ -72,7 +99,7 @@
       </div>
     </div>
     <input type="file" id="restoreFile" accept="application/json,.json" class="hidden">
-    <p class="dim tiny mem-note">Memories are tied to your current API key. Changing the key wipes memories and history.</p>
+    <p class="dim tiny mem-note">Memories and history are tied to your current API key — each key keeps its own private copy.</p>
     <div id="memoryDetail" class="hidden"></div>
     <div class="list" id="memoryList"></div>
   </section>
@@ -80,10 +107,24 @@
   <section class="view" id="view-settings">
     <h1>Settings</h1>
     <div class="card">
-      <h3>API key</h3>
-      <p class="dim">One key for all 50 agents. It is sent to this localhost server inside the call setup message only — kept in server memory for the call, never stored, never logged, never placed in a URL.</p>
-      <input id="keyInput" type="password" placeholder="Paste your Gemini API key" autocomplete="off" spellcheck="false">
-      <p class="mono dim tiny" id="keyState">No key entered</p>
+      <h3>Key profiles</h3>
+      <p class="dim">Your Gemini API key is your login. Keys stay on this device — only the key's hash is ever sent to the server. Each key keeps its own agents, history, and memories.</p>
+      <p class="mono dim tiny" id="keyState">—</p>
+      <div class="set-row-btns">
+        <button class="btn ghost" id="keySwitcher" type="button">Switch key / manage keys</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Accent color</h3>
+      <p class="dim">Pick the theme accent used across the app.</p>
+      <div class="accent-row" id="accentRow"></div>
+    </div>
+    <div class="card">
+      <h3>Data retention</h3>
+      <p class="dim">Device recordings and server call records older than this are deleted automatically.</p>
+      <label class="lbl">Keep data for
+        <span class="ret-row"><input id="retentionDays" type="number" min="1" max="3650" step="1" style="width:5.5em"> <span class="dim">days</span></span>
+      </label>
     </div>
     <div class="card">
       <h3>Call preferences</h3>
@@ -134,6 +175,10 @@
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg>
         <label>Chat</label>
       </button>
+      <button class="p-btn" id="pMin" type="button" aria-label="minimize call">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <label>Minimize</label>
+      </button>
     </div>
     <div class="p-hangup-row">
       <button class="p-hangup" id="pHangup" type="button" aria-label="End call">
@@ -163,6 +208,12 @@
 <script src="avatar.js"></script>
 <script src="recorder.js"></script>
 <script src="summary.js"></script>
+<script src="keygate.js"></script>
+<script src="custom-agents.js"></script>
+<script src="directory.js"></script>
+<script src="callx.js"></script>
+<script src="greeting.js"></script>
+<script src="hygiene.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

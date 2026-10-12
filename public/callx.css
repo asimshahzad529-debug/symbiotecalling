@@ -1,0 +1,162 @@
+/* public/callx.css — WS5 Call Experience styles.
+ * Light theme by default; follows the app's CSS vars (--acc accent,
+ * --ink, --line, --panel, --err) so dark mode comes along for free. */
+
+.callx-notes {
+  margin: 10px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel2, var(--panel));
+  overflow: hidden;
+}
+.callx-notes-sum {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink2);
+  list-style: none;
+}
+.callx-notes-sum::-webkit-details-marker { display: none; }
+.callx-notes-sum::before { content: '✎ '; color: var(--acc); }
+.callx-notes-ta {
+  width: 100%;
+  min-height: 64px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: .85rem;
+  padding: 8px 12px;
+  resize: vertical;
+  outline: none;
+}
+.callx-notes-ta:focus { box-shadow: inset 0 0 0 2px var(--ring); }
+
+/* floating bubble — the overlay collapses to a draggable pill */
+#callOverlay.callx-minimized {
+  position: fixed;
+  left: auto; right: 14px; top: auto; bottom: 14px;
+  width: 210px; height: auto;
+  padding: 10px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  cursor: grab;
+  z-index: 1200;
+  overflow: hidden;
+}
+#callOverlay.callx-minimized .phone { padding: 0; background: none; box-shadow: none; }
+#callOverlay.callx-minimized .p-actions,
+#callOverlay.callx-minimized .sheet,
+#callOverlay.callx-minimized .meter,
+#callOverlay.callx-minimized .eq,
+#callOverlay.callx-minimized .rec-ind,
+#callOverlay.callx-minimized .chat-sheet,
+#callOverlay.callx-minimized .callx-notes,
+#callOverlay.callx-minimized .p-number,
+#callOverlay.callx-minimized .p-statusbar { display: none !important; }
+#callOverlay.callx-minimized .p-avatar { width: 44px; height: 44px; font-size: 1.2rem; margin: 0 auto 6px; }
+#callOverlay.callx-minimized .p-name { font-size: .85rem; text-align: center; }
+#callOverlay.callx-minimized .p-state { font-size: .78rem; text-align: center; margin-top: 2px; }
+
+.callx-expand {
+  position: fixed;
+  right: 14px; bottom: 148px;
+  z-index: 1201;
+  border: 1px solid var(--acc);
+  background: var(--acc);
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.callx-expand:active { transform: scale(.96); }
+
+/* connection meter pill */
+.callx-meter {
+  position: absolute;
+  top: 8px; right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,.28);
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: .68rem;
+  z-index: 5;
+}
+.callx-meter-dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+.callx-meter-dot.live { background: #22c55e; }
+.callx-meter-dot.connecting { background: #f59e0b; }
+.callx-meter-dot.offline { background: #ef4444; }
+.callx-meter-bar {
+  display: inline-block;
+  width: 46px; height: 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,.25);
+  overflow: hidden;
+}
+.callx-meter-bar > span {
+  display: block; height: 100%; width: 0%;
+  background: #22c55e;
+  transition: width .12s linear;
+}
+
+/* quota alert — the timer turns red and pulses past the limit */
+#pState.callx-over {
+  color: var(--err) !important;
+  font-weight: 700;
+  animation: callx-pulse 1.2s ease-in-out infinite;
+}
+@keyframes callx-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+
+/* transcript search highlight */
+.callx-mark {
+  background: var(--acc-soft);
+  color: inherit;
+  outline: 1px solid var(--acc);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+/* recents (dialer tab + dashboard) */
+.callx-recent-head {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin: 10px 4px 4px;
+}
+.callx-recent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+.callx-recent:hover { border-color: var(--acc); }
+.callx-recent:active { transform: scale(.99); }
+.callx-recent-mid { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.callx-recent-name { font-weight: 600; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.callx-recent-num { font-size: .76rem; }
+.callx-star { font-size: 1.05rem; color: var(--muted); padding: 2px 4px; }
+.callx-star.on { color: var(--acc); }
+.callx-recent-go { color: var(--acc); font-size: 1.1rem; font-weight: 700; }

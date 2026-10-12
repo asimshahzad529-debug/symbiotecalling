@@ -17,14 +17,18 @@
  *   { type:'error', message, code? }
  *
  * Memories (notes + transcript) and call history are scoped to the API key
- * in use (by hash). A different key wipes both — one key's data never leaks
- * into another's.
+ * in use (by hash): per-key partitions under DATA_DIR. Switching keys
+ * never wipes or leaks another key's data. Rate limiting, usage metering,
+ * and an audit log are kept per key by src/keystore.js.
  */
 
 var crypto = require('crypto');
 var live = require('./live');
 var agents = require('./agents');
 var prompt = require('./prompt');
+var storeMod = require('./store');
+var memoryMod = require('./memory');
+var customAgents = require('./customAgents');
 
 var DEFAULT_MODELS = ['gemini-3.8-live', 'gemini-3.1-flash-live-preview', 'gemini-3.8-live-extended-thinking'];
 var END_CALL_DELAY_MS = 4000; // let the spoken goodbye finish before closing
@@ -40,6 +44,9 @@ function Bridge(ws, deps) {
   this.sdk = deps.sdk;
   this.envKey = deps.envKey || null;
   this.endCallDelayMs = deps.endCallDelayMs || END_CALL_DELAY_MS;
+  this.keystore = deps.keystore || null;       // v7 rate limiting / usage / audit
+  this.customStore = deps.customStore || null; // v7 custom-agent resolution
+  this.dataDir = deps.dataDir || null;         // v7 per-key history/memory partitions
   this.session = null;
   this.agent = null;
   this.keyHash = null;
@@ -48,6 +55,7 @@ function Bridge(ws, deps) {
   this.memFinalized = false;
   this.connected = false;
   this.alive = true;
+  this._connectAt = 0;
   var self = this;
   ws.on('message', function (raw) { self.onMessage(raw); });
   ws.on('close', function () { self.shutdown(); });
@@ -89,6 +97,14 @@ Bridge.prototype.onMessage = function (raw) {
 };
 
 Bridge.prototype.resolveAgent = function (msg) {
+  // v7 custom agents: ids start with 'custom_', resolved from the caller's
+  // per-key store so one key's agents never leak to another key.
+  if (msg.agentId && typeof msg.agentId === 'string' && msg.agentId.indexOf('custom_') === 0) {
+    if (!this.customStore) return null;
+    var rec;
+    try { rec = this.customStore.get(this.keyHash, msg.agentId); } catch (e) { return null; }
+    return rec ? customAgents.toAgent(rec) : null;
+  }
   if (msg.agentId && typeof msg.agentId === 'string') return agents.getById(msg.agentId);
   if (msg.number && typeof msg.number === 'string') return agents.getByNumber(msg.number);
   return null;
@@ -110,32 +126,59 @@ Bridge.prototype.buildRecallText = function (agent, keyHash) {
 Bridge.prototype.handleSetup = async function (msg) {
   var self = this;
   if (this.session) { this.send({ type: 'error', message: 'call already active' }); return; }
-  var agent = this.resolveAgent(msg);
-  if (!agent) {
-    this.send({ type: 'error', message: 'number not in service', code: 'NO_SUCH_NUMBER' });
-    return;
-  }
+  // The key must be known BEFORE resolving the agent: custom agents are
+  // looked up in the caller's per-key store (v7 key gating).
   var key = (msg.apiKey && String(msg.apiKey).trim()) || this.envKey;
   if (!key) {
     this.send({ type: 'error', message: 'no API key: add it in Settings first', fatal: true, code: 'NO_KEY' });
     return;
   }
-  this.agent = agent;
   this.keyHash = keyHashOf(key);
+  var agent = this.resolveAgent(msg);
+  if (!agent) {
+    this.send({ type: 'error', message: 'number not in service', code: 'NO_SUCH_NUMBER' });
+    return;
+  }
+  this.agent = agent;
 
-  // Key-scoped data: a different key wipes memories + history.
-  try {
-    if (this.memory) {
-      var scope = await this.memory.ensureScope(this.keyHash);
-      if (scope.reset && this.history) { await this.history.clear(); }
-    }
-  } catch (e) { /* non-fatal: continue without memory */ }
+  // v7 rate limiting: at most maxConcurrent live calls per key.
+  if (this.keystore && !this.keystore.tryAcquire(this.keyHash)) {
+    this.send({ type: 'error', message: 'too many concurrent calls for this key', code: 'RATE_LIMITED' });
+    try { this.ws.close(); } catch (e) {}
+    return;
+  }
+  // Audit the call start (best effort; label looked up from key profiles).
+  if (this.keystore) {
+    try {
+      var label = '';
+      var profs = this.keystore.listProfiles();
+      for (var pi = 0; pi < profs.length; pi++) {
+        if (profs[pi] && profs[pi].keyHash === this.keyHash) { label = profs[pi].label || ''; break; }
+      }
+      this.keystore.audit({ keyHash: this.keyHash, label: label, event: 'call_start', agentId: agent.id }).catch(function () {});
+    } catch (e) { /* non-fatal */ }
+  }
+
+  // v7 per-key data: this key's own history + memory partition. The old
+  // wipe-on-key-switch (ensureScope) is obsolete — switching keys can
+  // never destroy another key's data.
+  if (this.dataDir) {
+    try {
+      this.history = new storeMod.CallHistory(this.dataDir, this.keyHash);
+      this.memory = new memoryMod.MemoryStore(this.dataDir, this.keyHash);
+    } catch (e) { /* keep the shared instances on partition failure */ }
+  }
 
   var models = Array.isArray(msg.models) && msg.models.length ? msg.models.filter(function (m) { return typeof m === 'string'; }) : DEFAULT_MODELS.slice();
   if (msg.model && typeof msg.model === 'string' && msg.model.trim()) models = [msg.model.trim()].concat(models.filter(function (m) { return m !== msg.model.trim(); }));
 
   this.send({ type: 'call', state: 'connecting', agent: publicAgent(agent) });
   var recallText = this.buildRecallText(agent, this.keyHash);
+  // v7: SymAgent's prompt also lists the caller's custom agents.
+  var customDir = '';
+  if (agent.id === 'symagent' && this.customStore) {
+    try { customDir = customAgents.directorySection(this.customStore.list(this.keyHash)); } catch (e) {}
+  }
   var session = this.createSession({
     sdk: this.sdk,
     store: null,
@@ -145,7 +188,9 @@ Bridge.prototype.handleSetup = async function (msg) {
     voice: agent.voice,
     agentId: agent.id,
     agentName: agent.name,
-    systemInstruction: prompt.buildAgentInstruction(agent, recallText),
+    keyHash: this.keyHash,
+    customStore: this.customStore,
+    systemInstruction: prompt.buildAgentInstruction(agent, recallText, customDir),
     onEvent: function (ev) { self.onEvent(ev); }
   });
   this.session = session;
@@ -156,6 +201,7 @@ Bridge.prototype.onEvent = function (ev) {
   var self = this;
   if (ev.type === 'setup_complete' && !this.connected) {
     this.connected = true;
+    this._connectAt = Date.now(); // v7 usage metering baseline
     var info = { agentId: this.agent.id, agentName: this.agent.name, number: this.agent.number };
     var self2 = this;
     this._logStartP = this.history.logStart(info).then(function (id) {
@@ -218,6 +264,21 @@ Bridge.prototype.shutdown = function () {
   var self = this;
   if (this.connected && this._logStartP) {
     this._logStartP.then(function (id) { if (id) return self.history.logEnd(id); }).catch(function () {});
+  }
+  // v7 usage metering + audit on call end, then ALWAYS release the
+  // rate-limit slot (shutdown runs on both close and error).
+  if (this.keystore && this.keyHash) {
+    try {
+      if (this.connected && this._connectAt) {
+        var minutes = Math.max(0, (Date.now() - this._connectAt) / 60000);
+        this.keystore.recordCall(this.keyHash, minutes).catch(function () {});
+      }
+      this.keystore.audit({
+        keyHash: this.keyHash, label: '',
+        event: 'call_end', agentId: this.agent ? this.agent.id : null
+      }).catch(function () {});
+      this.keystore.release(this.keyHash);
+    } catch (e) { /* non-fatal */ }
   }
   this.finalizeMemory();
   try { if (this.session) this.session.hangup(); } catch (e) {}

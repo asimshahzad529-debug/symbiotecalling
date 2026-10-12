@@ -156,3 +156,34 @@ exports['history importAll result survives a fresh instance'] = async function (
   var h2 = new CallHistory(dir);
   assert.deepStrictEqual(h2.list().map(function (e) { return e.id; }), ['r1', 'r2']);
 };
+
+exports['per-key history partition writes to calls_<hash>.json'] = async function () {
+  var dir = tmpdir();
+  var kh = 'd'.repeat(64);
+  var h = new CallHistory(dir, kh);
+  var id = await h.logStart(callInfo(1));
+  assert.strictEqual(typeof id, 'string');
+  assert.ok(fs.existsSync(path.join(dir, 'calls_' + kh + '.json')), 'calls_<hash>.json lands in the given dir');
+  assert.ok(!fs.existsSync(path.join(dir, 'calls.json')), 'legacy file untouched');
+  assert.strictEqual(h.list().length, 1);
+  // importAll/clear are scoped to the partition
+  await h.clear();
+  assert.strictEqual(h.list().length, 0);
+  assert.strictEqual(new CallHistory(dir, 'e'.repeat(64)).list().length, 0);
+};
+
+exports['per-key memory partition writes to memories_<hash>.json'] = async function () {
+  var dir = tmpdir();
+  var kh = 'd'.repeat(64);
+  var m = new MemoryStore(dir, kh);
+  var id = await m.beginCall({ keyHash: kh, agentId: 'a1', agentName: 'Agent1', number: '+15550100001' });
+  assert.strictEqual(typeof id, 'string');
+  assert.ok(fs.existsSync(path.join(dir, 'memories_' + kh + '.json')), 'memories_<hash>.json lands in the given dir');
+  assert.ok(!fs.existsSync(path.join(dir, 'memories.json')), 'legacy file untouched');
+  assert.strictEqual(m.list(kh).length, 1);
+  // recall still filters by the entry's own keyHash field
+  var rec = m.recall('a1', kh, 3);
+  assert.strictEqual(rec.length, 0, 'call not ended yet -> not recalled');
+  await m.endCall(id);
+  assert.strictEqual(m.recall('a1', kh, 3).length, 1);
+};

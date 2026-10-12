@@ -263,3 +263,20 @@ footer.note{text-align:center;color:var(--muted);font-size:.74rem;padding:1.8rem
 .det-sec h3{margin:0 0 .45rem}
 .det-summary{white-space:pre-wrap;font-size:.9rem;line-height:1.55;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.7rem .9rem}
 .det-row-btns{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem}
+
+/* ---------- v7.0: nav link tab, history filters, accent picker, retention ---------- */
+.tab-link{display:inline-flex;align-items:center;padding:.45rem .8rem;border-radius:10px;font:inherit;font-size:.85rem;font-weight:600;color:var(--ink2);text-decoration:none;border:1px solid transparent}
+.tab-link:hover{color:var(--acc);border-color:var(--line2)}
+.hist-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem}
+.hist-filters select,.hist-filters input[type="date"]{font:inherit;font-size:.82rem;padding:.45rem .6rem;border:1px solid var(--line2);border-radius:10px;background:var(--panel);color:var(--ink)}
+.hist-filters select:focus,.hist-filters input:focus{outline:none;border-color:var(--acc)}
+.accent-row{display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.4rem}
+.accent-swatch{width:34px;height:34px;border-radius:50%;border:2px solid transparent;padding:0;cursor:pointer;transition:transform .1s,border-color .15s}
+.accent-swatch:hover{transform:scale(1.1)}
+.accent-swatch.active{border-color:var(--ink);box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--acc)}
+.set-row-btns{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}
+.ret-row{display:inline-flex;align-items:center;gap:.5rem;margin-top:.3rem}
+.ret-row input{font:inherit;padding:.45rem .6rem;border:1px solid var(--line2);border-radius:10px;background:var(--panel);color:var(--ink)}
+.dial-recents-head{margin:1.2rem 0 .4rem;font-size:.85rem;color:var(--dim);font-weight:600}
+/* view container for Custom Agents page */
+#customAgentsRoot{min-height:40vh}
