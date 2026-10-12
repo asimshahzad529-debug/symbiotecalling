@@ -688,6 +688,23 @@
   // reply forever — this half-duplex start fixes "agent never greets".
   var greetingDone = false, greetFallbackT = null;
 
+  /* v7.5 greeting mask: the overlay stays on "Connecting…" from tap until the
+   * first greeting output, then reveals the live UI at that exact moment —
+   * the user perceives the greeting the instant the call connects (agents
+   * actually greet ~5s after the Live session connects). Pure UX; the mic
+   * gate above is untouched. */
+  var greetMask = null;
+  function revealCallUI() {
+    if (timerInt) return; // already revealed (exactly-once)
+    connectedAt = Date.now(); // timer starts at reveal: the perceived call start
+    setCallState(fmtTimer(), 'live');
+    $('pAvatar').classList.add('ring');
+    timerInt = setInterval(function () {
+      setCallState(fmtTimer(), 'live'); recTick();
+      try { if (window.CallX) CallX.quota.check(Math.floor((Date.now() - connectedAt) / 1000)); } catch (e) {}
+    }, 1000);
+  }
+
   function ungateMic() {
     if (greetingDone) return;
     greetingDone = true;
@@ -794,6 +811,16 @@
     $('pEq').classList.add('hidden');
     $('pAvatar').classList.remove('ring');
     setCallState('Dialing…');
+    // v7.5 greeting mask: arm now; its onMask shows "Connecting…" and the
+    // live UI is revealed only on first greeting output (see setup_complete).
+    if (greetMask) { try { greetMask.reset(); } catch (e) {} greetMask = null; }
+    if (window.GreetingMask) {
+      greetMask = GreetingMask.create({
+        onMask: function () { setCallState('Connecting…'); },
+        onReveal: function () { revealCallUI(); }
+      });
+      greetMask.start();
+    }
     $('pName').textContent = '—'; $('pNumber').textContent = '—';
     $('pAvatar').innerHTML = avatarSVG({ id: 'default', color: '#3a3a48' });
     $('callOverlay').classList.remove('hidden');
@@ -851,12 +878,22 @@
       case 'setup_complete':
         connectedAt = Date.now();
         sfx('connect');
-        setCallState(fmtTimer(), 'live');
-        $('pAvatar').classList.add('ring');
-        timerInt = setInterval(function () {
-          setCallState(fmtTimer(), 'live'); recTick();
-          try { if (window.CallX) CallX.quota.check(Math.floor((Date.now() - connectedAt) / 1000)); } catch (e) {}
-        }, 1000);
+        // v7.5 greeting mask: do NOT reveal the live UI here. Stay on
+        // "Connecting…" until the first greeting output reveals it via the
+        // mask (first greeting audio -> user perceives instant greeting).
+        // Defensive: arm the mask here if startCall didn't (transfer path).
+        if (window.GreetingMask) {
+          if (!greetMask) {
+            greetMask = GreetingMask.create({
+              onMask: function () { setCallState('Connecting…'); },
+              onReveal: function () { revealCallUI(); }
+            });
+          }
+          if (greetMask.getState() === 'idle') greetMask.start();
+          else setCallState('Connecting…');
+        } else {
+          revealCallUI(); // no mask module: legacy immediate reveal
+        }
         // Fallback: if the greeting never arrives, open the mic anyway.
         if (greetFallbackT) clearTimeout(greetFallbackT);
         greetFallbackT = setTimeout(ungateMic, 10000);
@@ -872,9 +909,9 @@
        * behavior needs a live-key call to confirm. */
       case 'greeting_state':
         if (msg.state === 'trigger_sent' || msg.state === 'retry_sent') setCallState('greeting…');
-        else if (msg.state === 'audio_received') { setCallState(fmtTimer(), 'live'); ungateMic(); }
-        else if (msg.state === 'text_received') setCallState('greeting…');
-        else if (msg.state === 'failed') setCallState('Say hello to begin', 'err');
+        else if (msg.state === 'audio_received') { if (greetMask) greetMask.onAudio('audio'); else revealCallUI(); ungateMic(); }
+        else if (msg.state === 'text_received') { if (greetMask) greetMask.onAudio('text'); else revealCallUI(); }
+        else if (msg.state === 'failed') { if (greetMask) greetMask.onTimeout(); setCallState('Say hello to begin', 'err'); }
         break;
       case 'greeting_text_only':
         chatBubble('omni', String(msg.text || ''));
@@ -894,7 +931,7 @@
         linkChips(msg.links || []);
         sfx('message');
         break;
-      case 'audio': ungateMic(); playChunk(msg.data, msg.mimeType); break;
+      case 'audio': if (greetMask && greetMask.isMasking()) greetMask.onAudio('audio'); ungateMic(); playChunk(msg.data, msg.mimeType); break;
       case 'turn_complete': $('pEq').classList.add('hidden'); break;
       case 'interrupted': stopPlayback(); break;
       case 'call_ended_by':
@@ -918,6 +955,7 @@
     sfx('hangup');
     finishCallArtifacts();
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
+    if (greetMask) { try { greetMask.reset(); } catch (e) {} greetMask = null; }
     stopPlayback();
     setCallState(text || 'Call ended');
     $('pAvatar').classList.remove('ring');
