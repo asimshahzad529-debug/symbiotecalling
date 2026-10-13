@@ -30,16 +30,6 @@
   font-size: 14px;
 }
 
-.ca-clone-select {
-  padding: 8px 10px;
-  border: 1px solid var(--line2);
-  border-radius: 10px;
-  background: var(--panel);
-  font-size: 14px;
-  color: var(--ink);
-  max-width: 260px;
-}
-
 /* buttons */
 .ca-btn {
   border: 1px solid var(--line2);
@@ -122,10 +112,14 @@
 
 .ca-card-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 
-/* form */
+/* wizard */
 .ca-form-host { margin-top: 20px; }
 
-.ca-form {
+/* UNVERIFIED-LIVE: wizard visual rendering (spacing, tone cards, progress
+ * bar, review card) needs a real-browser check — no live browser available
+ * to the worker. Layout uses only existing app CSS vars so it follows the
+ * device/system theme and accent picker automatically. */
+.ca-wiz {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -133,10 +127,123 @@
   box-shadow: var(--shadow);
 }
 
-.ca-form-title { margin: 0 0 14px; font-size: 17px; }
+.ca-wiz-head { margin-bottom: 16px; }
+.ca-wiz-title { margin: 0 0 4px; font-size: 17px; color: var(--ink); }
+.ca-wiz-label { font-size: 13px; color: var(--dim); margin-bottom: 8px; }
 
+.ca-wiz-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.ca-wiz-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--acc);
+  transition: width 0.25s ease;
+}
+
+.ca-wiz-steps {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ca-wiz-dot {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dim);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+}
+.ca-wiz-dot.done {
+  color: #fff;
+  background: var(--acc);
+  border-color: var(--acc);
+}
+.ca-wiz-dot.active {
+  color: var(--acc);
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+
+.ca-wiz-body { margin: 4px 0 16px; min-height: 150px; }
+
+/* tone cards */
+.ca-tone-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.ca-tone-card {
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel2);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+.ca-tone-card:hover { border-color: var(--acc); }
+.ca-tone-card.sel {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+  box-shadow: 0 0 0 1px var(--acc);
+}
+.ca-tone-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.ca-tone-desc { font-size: 12px; color: var(--dim); }
+
+/* review */
+.ca-wiz-review {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.ca-wiz-review-row {
+  display: flex;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ca-wiz-review-row:last-child { border-bottom: none; }
+.ca-wiz-review-label {
+  flex: 0 0 76px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 2px;
+}
+.ca-wiz-review-value {
+  flex: 1;
+  font-size: 14px;
+  color: var(--ink);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* nav */
+.ca-wiz-btns {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ca-wiz-nav-left,
+.ca-wiz-nav-right { display: flex; gap: 10px; }
+
+/* fields */
 .ca-field { margin-bottom: 14px; }
-.ca-field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.ca-field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--ink); }
 .ca-field input[type="text"],
 .ca-field select,
 .ca-field textarea {
@@ -148,7 +255,7 @@
   font-size: 14px;
   font-family: inherit;
   color: var(--ink);
-  background: var(--panel);
+  background: var(--bg);
 }
 .ca-field input:focus,
 .ca-field select:focus,
@@ -159,7 +266,7 @@
 }
 .ca-field textarea { resize: vertical; }
 
-.ca-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.ca-hint { font-size: 12px; color: var(--dim); margin-top: 4px; }
 
 .ca-templates { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 14px; }
 .ca-chip {
@@ -183,10 +290,10 @@
   margin-bottom: 14px;
 }
 
-.ca-form-btns { display: flex; gap: 10px; }
-
 @media (max-width: 560px) {
   .ca-card { flex-direction: column; align-items: stretch; }
   .ca-card-actions { justify-content: flex-end; }
-  .ca-clone-select { max-width: none; width: 100%; }
+  .ca-tone-grid { grid-template-columns: 1fr; }
+  .ca-wiz-btns { flex-direction: column; }
+  .ca-wiz-nav-right { justify-content: flex-end; }
 }
