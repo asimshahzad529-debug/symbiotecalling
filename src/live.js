@@ -20,6 +20,8 @@ var prompt = require('./prompt');
 var search = require('./search');
 var agents = require('./agents');
 var customAgents = require('./customAgents');
+var businessLine = require('./businessLine');
+var ivr = require('./ivr');
 
 var BACKOFFS = [5000, 10000, 20000, 40000];
 
@@ -27,6 +29,39 @@ function maskError(e) {
   var m = String((e && e.message) || e || 'unknown error');
   // Redact anything that looks like a key.
   return m.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[REDACTED]').slice(0, 300);
+}
+
+/**
+ * v8 ERR-server: map a raw Gemini Live API error to a user-friendly
+ * { code, message }. No keys, no stack traces, no SDK internals in the
+ * message. The session emits these as {type:'live_error', code, message};
+ * the frontend worker consumes exactly that shape.
+ */
+function friendlyLiveError(e) {
+  var raw = String((e && e.message) || e || '').toLowerCase();
+  if (/api key|apikey|401|403|permission denied|invalid key/.test(raw)) {
+    return { code: 'auth_failed', message: 'Your API key was rejected by Google. Check the key in Settings.' };
+  }
+  if (/429|quota|resource exhausted|rate limit/.test(raw)) {
+    return { code: 'quota_exceeded', message: 'Google API quota exceeded for this key. Try again later or use another key.' };
+  }
+  if (/not found|not supported|unsupported|invalid model/.test(raw)) {
+    return { code: 'model_unavailable', message: 'The selected model is unavailable right now. Trying another model…' };
+  }
+  if (/network|econnrefused|enotfound|etimedout|fetch failed|socket/.test(raw)) {
+    return { code: 'network_error', message: 'Could not reach Google. Check your connection and try again.' };
+  }
+  if (/websocket|close/.test(raw)) {
+    return { code: 'session_dropped', message: 'The voice session dropped unexpectedly.' };
+  }
+  return { code: 'session_error', message: 'The voice session hit a problem and could not start.' };
+}
+
+/** Emit {type:'live_error', code, message}; also keeps the legacy 'error' event for old handlers. */
+function emitLiveError(emit, e, fatal) {
+  var f = friendlyLiveError(e);
+  emit({ type: 'live_error', code: f.code, message: f.message, fatal: !!fatal });
+  emit({ type: 'error', message: 'Live error: ' + maskError(e), code: f.code, fatal: !!fatal });
 }
 
 function toolDeclarations(Type, agentId) {
@@ -231,10 +266,30 @@ function createOmniSession(opts) {
     greetHs: { phase: 'idle', triggerSentAt: 0, retrySentAt: 0, firstOutputAt: 0, outputKind: null },
     _greetRetryTimer: null,
     _greetFailTimer: null,
+    // v8 #26/#13: business-line inbound call state. opts.inbound =
+    // { keyHash, from, dataDir, ivrConfig?, setTimer?, clearTimer? }.
+    inbound: opts.inbound || null,
+    inboundTracker: null,
+    menu: { phase: 'idle', config: null, timer: null },
     diag: { framesToGoogle: 0, framesFromGoogle: 0, toolCalls: 0, turns: 0 }
   };
 
   function emit(ev) { try { onEvent(ev); } catch (e) { /* never break session on handler error */ } }
+
+  // v8 #26: track the inbound call for the missed-call log. If the session
+  // never picks up (no setupComplete) within 30s, the tracker logs it as
+  // missed. Fictional telephony — UNVERIFIED-LIVE.
+  if (state.inbound) {
+    try {
+      state.inboundTracker = businessLine.trackInboundCall({
+        dataDir: state.inbound.dataDir || '.',
+        keyHash: state.inbound.keyHash,
+        from: state.inbound.from,
+        setTimer: state.inbound.setTimer,
+        clearTimer: state.inbound.clearTimer
+      });
+    } catch (e) { /* tracker failure must not kill the call */ }
+  }
 
   function liveConfig() {
     return {
@@ -270,7 +325,7 @@ function createOmniSession(opts) {
       callbacks: {
         onopen: function () { /* setup confirmation comes via setupComplete message */ },
         onmessage: handleMessage,
-        onerror: function (e) { emit({ type: 'error', message: 'Live error: ' + maskError(e) }); },
+        onerror: function (e) { emitLiveError(emit, e, false); },
         onclose: function (e) { handleClose(e); }
       }
     });
@@ -294,7 +349,7 @@ function createOmniSession(opts) {
         emit({ type: 'diag', note: 'model rejected, trying fallback', model: model });
       }
     }
-    emit({ type: 'error', message: 'Could not start Live session: ' + maskError(lastErr), fatal: true });
+    emitLiveError(emit, lastErr, true);
   }
 
   function handleMessage(message) {
@@ -346,7 +401,12 @@ function createOmniSession(opts) {
          * || 12000 (UNVERIFIED-LIVE: values are engineering guesses —
          * real greeting latency needs a live-key measurement).
          * ----------------------------------------------------------- */
-        if (!state.greeted) {
+        // v8 #26: the session picked up — the inbound call is answered.
+        if (state.inboundTracker) { try { state.inboundTracker.answered(); } catch (e) {} }
+        if (state.inbound && state.inbound.ivrConfig) {
+          state.greeted = true; // menu replaces the standalone greeting
+          startMenu();
+        } else if (!state.greeted) {
           state.greeted = true;
           greetStart();
         }
@@ -465,6 +525,80 @@ function createOmniSession(opts) {
     emit({ type: 'greeting_failed', hint: 'Say hello to begin' });
   }
 
+  /* ---------------------------------------------------------------------------
+   * v8 #13 — IVR menu phase (business-line inbound calls only).
+   *
+   * The menu REPLACES the standalone greeting handshake: on setupComplete the
+   * receptionist gets one instruction turn (greet briefly, then speak the
+   * menu). DTMF digits arrive via the public sendDtmf(digit) method (the
+   * client forwards keypad presses) and are intercepted here — they never
+   * reach the model. A mapped digit routes to the agent through the same
+   * resolveTransferTarget() path transfer_call uses. No digit within
+   * MENU_TIMEOUT_MS routes to defaultAgentId. UNVERIFIED-LIVE: the routing
+   * logic is pure/tested; live DTMF timing depends on real-call testing.
+   * ------------------------------------------------------------------------- */
+
+  /** Route the inbound call to one agent id via the transfer machinery. Emits transfer_requested. */
+  function menuRouteTo(agentId, source) {
+    var tr = resolveTransferTarget({ agentId: agentId }, { customStore: state.customStore, keyHash: state.keyHash });
+    if (!tr.ok) {
+      emit({ type: 'ivr_error', detail: tr.error });
+      return false;
+    }
+    emit({ type: 'transfer_requested', target: tr.target, source: source });
+    return true;
+  }
+
+  function clearMenuTimer() {
+    if (state.menu.timer) { clearTimeout(state.menu.timer); state.menu.timer = null; }
+  }
+
+  // Start the menu phase on setupComplete: instruct the receptionist to
+  // greet briefly and speak the menu, then arm the no-digit timeout.
+  function startMenu() {
+    var cfg;
+    try { cfg = ivr.normalizeConfig(state.inbound.ivrConfig); }
+    catch (e) { emit({ type: 'ivr_error', detail: 'bad ivr config: ' + e.message }); return; }
+    state.menu.config = cfg;
+    state.menu.phase = 'active';
+    var who = state.agentName ? state.agentName : 'the assistant';
+    var say = 'This is an inbound call to the business line. Greet briefly as ' + who +
+      ', then say this menu exactly once: "' + ivr.buildMenuPrompt(cfg) +
+      '" Then wait silently for the caller to press a digit.';
+    try {
+      state.session.sendClientContent({
+        turns: [{ role: 'user', parts: [{ text: say }] }],
+        turnComplete: true
+      });
+    } catch (e) { /* transport send failed; timeout below still routes */ }
+    emit({ type: 'menu_state', state: 'menu_sent' });
+    state.menu.timer = setTimeout(function () {
+      state.menu.timer = null;
+      if (state.closed || state.menu.phase !== 'active') return;
+      state.menu.phase = 'resolved';
+      emit({ type: 'menu_state', state: 'timeout', detail: { defaultAgentId: cfg.defaultAgentId } });
+      menuRouteTo(cfg.defaultAgentId, 'ivr_timeout');
+    }, ivr.MENU_TIMEOUT_MS);
+  }
+
+  /** Handle one DTMF digit during the menu phase. Returns true when consumed. */
+  function handleDtmf(digit) {
+    if (state.menu.phase !== 'active' || !state.menu.config) return false;
+    var d = String(digit == null ? '' : digit).trim();
+    if (!/^[0-9]$/.test(d)) return false; // not a menu digit; ignore
+    var agentId = ivr.resolveDigit(state.menu.config, d);
+    if (!agentId) {
+      // Unmapped digit: keep the menu alive, tell the client to re-speak it.
+      emit({ type: 'ivr_invalid_digit', digit: d });
+      return true;
+    }
+    state.menu.phase = 'resolved';
+    clearMenuTimer();
+    emit({ type: 'menu_state', state: 'digit', detail: { digit: d, agentId: agentId } });
+    menuRouteTo(agentId, 'ivr');
+    return true;
+  }
+
   async function runTool(fc) {
     state.diag.toolCalls++;
     var result = await executeTool(fc.name, fc.args || {}, {
@@ -526,6 +660,11 @@ function createOmniSession(opts) {
       state.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: String(text) }] }], turnComplete: true });
       return true;
     },
+    // v8 #13: DTMF digit pressed by the caller (keypad). Intercepted during
+    // the menu phase; returns true when the digit was consumed by the menu.
+    sendDtmf: function (digit) {
+      return handleDtmf(digit);
+    },
     changeRole: function (role) {
       state.role = role;
       if (state.session && state.setupConfirmed) {
@@ -552,6 +691,8 @@ function createOmniSession(opts) {
       if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
       if (state._greetRetryTimer) { clearTimeout(state._greetRetryTimer); state._greetRetryTimer = null; }
       if (state._greetFailTimer) { clearTimeout(state._greetFailTimer); state._greetFailTimer = null; }
+      clearMenuTimer();
+      if (state.inboundTracker) { try { state.inboundTracker.ended(); } catch (e) {} }
       try { if (state.session) state.session.close(); } catch (e) {}
       state.session = null;
       state.apiKey = null; // key lives in memory only for the session

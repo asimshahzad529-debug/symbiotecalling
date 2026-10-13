@@ -10,6 +10,19 @@
  *   GET    /api/v7/key/usage                -> { calls, minutes } (caller's key) | 401/400
  *   GET    /api/v7/audit                    -> { entries: [...] } (recent, owner view) | 401/400
  *
+ * v8 additions (#26 business line, #13 IVR, #15 teams) — all JSON, same
+ * caller-key auth (x-key-hash / ?keyHash=), per-keyHash scoped:
+ *   GET    /api/v8/business-line            -> { number } (deterministic fictional number for this key)
+ *   GET    /api/v8/missed-calls             -> { missed: [{id,from,at,reason}] } (this key only)
+ *   DELETE /api/v8/missed-calls             -> { ok: true }
+ *   GET    /api/v8/ivr                      -> { config } | { config: null } (not configured yet)
+ *   POST   /api/v8/ivr                      -> { ok: true, config } | 400 { error }
+ *   GET    /api/v8/teams                    -> { config } (default team when unconfigured)
+ *   POST   /api/v8/teams                    -> { ok: true, config, warnings } | 400 { error }
+ *
+ * Numbers are fictional (no PSTN). Agent ids in IVR/team configs are
+ * validated against the 101 built-in agents only; custom-agent targets are
+ * rejected with a clear error until the custom store is wired in.
  * keyHash format (sha256 hex) is validated on every input; garbage gets 400.
  *
  * =====================================================================
@@ -104,6 +117,10 @@
  */
 
 var keystoreMod = require('./keystore');
+var businessLineMod = require('./businessLine');
+var ivrMod = require('./ivr');
+var teamsMod = require('./teams');
+var agentsMod = require('./agents');
 
 /** Normalize a candidate keyHash from any source; throws on garbage. */
 function cleanKeyHash(h) {
@@ -239,6 +256,91 @@ function mount(api, ctx) {
       sendJson(res, 200, { entries: mine.slice(0, 100) });
     }
     catch (e) { sendJson(res, 500, { error: 'read failed' }); }
+  });
+
+  /* -----------------------------------------------------------------------
+   * v8 routes (#26 business line, #13 IVR, #15 teams).
+   * Integrator: extend the server.js request-handler check to also dispatch
+   * /api/v8/* to this same router:
+   *     if (req.url.startsWith('/api/v7/key/') || req.url.startsWith('/api/v7/audit') ||
+   *         req.url.startsWith('/api/v8/')) { return keygateApi.handle(req, res); }
+   * --------------------------------------------------------------------- */
+
+  // Built-in agent lookup for config validation (custom-agent ids are
+  // rejected with a clear error — see header note).
+  function builtinAgentExists(id) { return !!(id && agentsMod.getById(String(id))); }
+
+  router.route('GET', '/api/v8/business-line', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    try {
+      // Fictional provider now; a real provider implements the same
+      // provisionNumber() contract (src/businessLine.js).
+      businessLineMod.FictionalTelephony.provisionNumber(kh).then(function (p) {
+        sendJson(res, 200, { number: p.number });
+      }).catch(function () { sendJson(res, 500, { error: 'number lookup failed' }); });
+    } catch (e) { sendJson(res, 500, { error: 'number lookup failed' }); }
+  });
+
+  router.route('GET', '/api/v8/missed-calls', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    try {
+      var missed = new businessLineMod.MissedCallStore(ctx.dataDir || '.', kh).list();
+      sendJson(res, 200, { missed: missed });
+    } catch (e) { sendJson(res, 500, { error: 'read failed' }); }
+  });
+
+  router.route('DELETE', '/api/v8/missed-calls', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    new businessLineMod.MissedCallStore(ctx.dataDir || '.', kh).clear()
+      .then(function () { sendJson(res, 200, { ok: true }); })
+      .catch(function () { sendJson(res, 500, { error: 'clear failed' }); });
+  });
+
+  router.route('GET', '/api/v8/ivr', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    try {
+      var cfg = new ivrMod.IvrStore(ctx.dataDir || '.', kh).get();
+      sendJson(res, 200, { config: cfg });
+    } catch (e) { sendJson(res, 500, { error: 'read failed' }); }
+  });
+
+  router.route('POST', '/api/v8/ivr', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    readBody(req).then(function (raw) {
+      var body;
+      try { body = JSON.parse(raw); } catch (e) { sendJson(res, 400, { error: 'bad JSON' }); return; }
+      try {
+        var cfg = new ivrMod.IvrStore(ctx.dataDir || '.', kh).save(body, builtinAgentExists);
+        sendJson(res, 200, { ok: true, config: cfg });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    }).catch(function () { sendJson(res, 400, { error: 'bad request' }); });
+  });
+
+  router.route('GET', '/api/v8/teams', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    try {
+      var team = new teamsMod.TeamStore(ctx.dataDir || '.', kh).get();
+      sendJson(res, 200, { config: team });
+    } catch (e) { sendJson(res, 500, { error: 'read failed' }); }
+  });
+
+  router.route('POST', '/api/v8/teams', function (req, res) {
+    var kh = needCallerKey(req, res);
+    if (!kh) return;
+    readBody(req).then(function (raw) {
+      var body;
+      try { body = JSON.parse(raw); } catch (e) { sendJson(res, 400, { error: 'bad JSON' }); return; }
+      try {
+        var out = new teamsMod.TeamStore(ctx.dataDir || '.', kh).save(body, builtinAgentExists);
+        sendJson(res, 200, { ok: true, config: out.config, warnings: out.warnings });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    }).catch(function () { sendJson(res, 400, { error: 'bad request' }); });
   });
 
   if (!api) {

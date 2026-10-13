@@ -263,7 +263,7 @@ function serveStatic(req, res) {
 var server = http.createServer(function (req, res) {
   // v7 key-gating routes (they include POSTs, so they must run before the
   // /api/ method split below, which would route POSTs to handlePost).
-  if (req.url.startsWith('/api/v7/key/') || req.url.startsWith('/api/v7/audit')) {
+  if (req.url.startsWith('/api/v7/key/') || req.url.startsWith('/api/v7/audit') || req.url.startsWith('/api/v8/')) {
     return keygateApi.handle(req, res);
   }
   if (req.url.startsWith('/api/')) {

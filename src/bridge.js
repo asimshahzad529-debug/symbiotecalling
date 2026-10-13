@@ -29,6 +29,9 @@ var prompt = require('./prompt');
 var storeMod = require('./store');
 var memoryMod = require('./memory');
 var customAgents = require('./customAgents');
+var businessLine = require('./businessLine');
+var ivrMod = require('./ivr');
+var teamsMod = require('./teams');
 
 var DEFAULT_MODELS = ['gemini-3.8-live', 'gemini-3.1-flash-live-preview', 'gemini-3.8-live-extended-thinking'];
 var END_CALL_DELAY_MS = 4000; // let the spoken goodbye finish before closing
@@ -107,6 +110,16 @@ Bridge.prototype.resolveAgent = function (msg) {
   }
   if (msg.agentId && typeof msg.agentId === 'string') return agents.getById(msg.agentId);
   if (msg.number && typeof msg.number === 'string') {
+    // v8 #26: business-line inbound — the key's own front-door number routes
+    // to the receptionist agent; live.js runs the IVR menu phase for it.
+    try {
+      if (this.keyHash && businessLine.numberForKeyHash(this.keyHash) === msg.number) {
+        this._businessInbound = { from: (msg.from && String(msg.from)) || 'widget' };
+        var _team = new teamsMod.TeamStore(this.dataDir || '.', this.keyHash).get();
+        var _recId = (_team && _team.receptionistAgentId) || teamsMod.DEFAULT_RECEPTIONIST;
+        return agents.getById(_recId) || agents.getById('symagent');
+      }
+    } catch (e) { /* fall through to normal resolution */ }
     var builtin = agents.getByNumber(msg.number);
     if (builtin) return builtin;
     // v7.5: custom agents of the ACTIVE key are dialable by their number too.
@@ -192,6 +205,20 @@ Bridge.prototype.handleSetup = async function (msg) {
   if (agent.id === 'symagent' && this.customStore) {
     try { customDir = customAgents.directorySection(this.customStore.list(this.keyHash)); } catch (e) {}
   }
+  // v8 #15: team config for the receptionist's smart-routing instructions
+  // (only SymAgent gets the team block — transfer_call is SymAgent-only).
+  var teamCfg = null;
+  if (agent.id === 'symagent') {
+    try { teamCfg = new teamsMod.TeamStore(this.dataDir || '.', this.keyHash).get(); } catch (e) {}
+  }
+  // v8 #26/#13: business-line inbound carries the IVR config for the menu phase.
+  var inboundOpts = null;
+  if (this._businessInbound) {
+    var ivrCfg = null;
+    try { ivrCfg = new ivrMod.IvrStore(this.dataDir || '.', this.keyHash).get(); } catch (e) {}
+    inboundOpts = { keyHash: this.keyHash, from: this._businessInbound.from, dataDir: this.dataDir || '.', ivrConfig: ivrCfg };
+    this._businessInbound = null;
+  }
   var session = this.createSession({
     sdk: this.sdk,
     store: null,
@@ -203,7 +230,8 @@ Bridge.prototype.handleSetup = async function (msg) {
     agentName: agent.name,
     keyHash: this.keyHash,
     customStore: this.customStore,
-    systemInstruction: prompt.buildAgentInstruction(agent, recallText, customDir),
+    inbound: inboundOpts,
+    systemInstruction: prompt.buildAgentInstruction(agent, recallText, customDir, teamCfg),
     onEvent: function (ev) { self.onEvent(ev); }
   });
   this.session = session;

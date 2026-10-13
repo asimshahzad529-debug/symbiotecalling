@@ -6,7 +6,7 @@
  * Written independently for this project (clean-room).
  */
 
-function buildAgentInstruction(agent, recallText, customDir) {
+function buildAgentInstruction(agent, recallText, customDir, team) {
   var genderLine = agent.gender === 'female'
     ? 'Voice & identity: you are female — speak as a woman, with a warm feminine voice and manner.'
     : agent.gender === 'male'
@@ -66,6 +66,10 @@ function buildAgentInstruction(agent, recallText, customDir) {
       '- Never transfer to yourself. Never guess which specialist to use — if you are unsure, ask the caller what they need.',
       ''
     );
+    // v8 #15: team smart-routing briefing — the team owner (this key) picked
+    // specialists; you are the receptionist, so assess the need and route.
+    var teamBlock = teamRoutingBlock(team);
+    if (teamBlock) lines.push(teamBlock, '');
   }
   lines.push(
     '',
@@ -94,3 +98,24 @@ function callingAgentsDirectory() {
 }
 
 module.exports = { buildAgentInstruction: buildAgentInstruction };
+
+/**
+ * v8 #15 — TEAM ROUTING briefing for the receptionist (SymAgent).
+ * `team` = { receptionistAgentId, specialistIds } from src/teams.js (or null).
+ * Returns a prompt block listing the specialists so the receptionist can
+ * assess the caller's need and transfer via the existing transfer_call tool.
+ * Returns '' when there is no team (or no specialists) to brief.
+ */
+function teamRoutingBlock(team) {
+  if (!team || !Array.isArray(team.specialistIds) || !team.specialistIds.length) return '';
+  var teamsMod;
+  try { teamsMod = require('./teams'); } catch (e) { return ''; }
+  var names = teamsMod.specialistBriefing(team.specialistIds);
+  if (!names.length) return '';
+  return [
+    'YOUR TEAM (smart routing — this key\'s configured specialists)',
+    'You are the receptionist for this business line. When a caller describes a need that matches one of YOUR specialists below, assess it, confirm with the caller ("Should I connect you to <name>?"), and use transfer_call to route them there.',
+    'Specialists: ' + names.join(' | '),
+    'If the need matches none of them, handle the call yourself — never invent a specialist, never guess a number.'
+  ].join('\n');
+}
