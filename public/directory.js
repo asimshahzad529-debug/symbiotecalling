@@ -463,6 +463,39 @@
   // Build one agent card using the same markup/classes as app.js renderAgents:
   // .acard > (.a-top > .avatar + (.a-name, .a-niche)) + .a-num.mono + .a-tag + .btn.call
   // v8: + a pin/unpin star button (top-right) feeding the "Pinned" row (#39).
+  /* v8 #39: SymAgent featured hero card above the directory (restored —
+   * it was dropped in the v7 directory rewrite). "OUR AI REPRESENTATIVE"
+   * badge + Talk to SymAgent button, same as v6. */
+  function buildHeroCard(agents, opts) {
+    var sym = null;
+    var list = agents || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].id === 'symagent') { sym = list[i]; break; }
+    }
+    if (!sym) return null;
+    var card = el('div', 'hero-card');
+    card.setAttribute('aria-label', 'Featured: SymAgent, AI representative');
+    card.appendChild(el('div', 'hero-badge', 'OUR AI REPRESENTATIVE'));
+    var row = el('div', 'hero-row');
+    var av = el('div', 'avatar lg');
+    av.innerHTML = avatarFor(sym);
+    row.appendChild(av);
+    var info = el('div', 'hero-info');
+    info.appendChild(el('div', 'a-name', sym.name || 'SymAgent'));
+    info.appendChild(el('div', 'a-niche', sym.niche || ''));
+    if (sym.tagline) info.appendChild(el('div', 'a-tag', sym.tagline));
+    row.appendChild(info);
+    card.appendChild(row);
+    var btn = el('button', 'hero-btn btn primary', 'Talk to SymAgent');
+    btn.type = 'button';
+    btn.addEventListener('click', function () {
+      sfxTap();
+      if (opts && typeof opts.onCall === 'function') opts.onCall(sym);
+    });
+    card.appendChild(btn);
+    return card;
+  }
+
   function buildCard(agent, opts) {
     var d = el('div', 'acard dir-card');
     if (agent.isCustom) d.classList.add('custom');
@@ -595,6 +628,8 @@
     container.classList.add('dir-wrap');
     container.appendChild(buildGreetingBanner());
     container.appendChild(buildToolbar(container, lastAgents));
+    var hero = buildHeroCard(lastAgents, lastOpts);
+    if (hero) container.appendChild(hero);
     var grid = el('div', 'dir-grid');
     grid.setAttribute('aria-label', 'All agents');
     container.appendChild(grid);
