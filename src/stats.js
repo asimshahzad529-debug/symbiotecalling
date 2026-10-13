@@ -97,4 +97,76 @@ function computeStats(calls, memories) {
   };
 }
 
-module.exports = { computeStats: computeStats };
+/**
+ * v8 #4 server-side analytics (consumed by the dashboard frontend).
+ * computeAnalytics(calls) returns EXACTLY:
+ * {
+ *   agents: [ { agentId, name, calls, avgSecs, byHour: [24] }, ... ],
+ *   totals: { calls, minutes }
+ * }
+ * - agents: every agent seen in the history, sorted by calls desc
+ *   (tie-break by minutes desc). avgSecs is the mean duration, rounded.
+ * - byHour: call counts per hour of day from startedAt, in the SERVER's
+ *   local timezone (buckets 0..23); entries with unparseable startedAt are
+ *   counted in calls but not in any hour bucket.
+ * - totals: total calls and total minutes (rounded) across all calls.
+ * Non-array input -> zeroed shape. Pure, no I/O, no secrets.
+ */
+function computeAnalytics(calls) {
+  if (!Array.isArray(calls)) return { agents: [], totals: { calls: 0, minutes: 0 } };
+
+  var totalCalls = 0;
+  var totalSec = 0;
+  var byAgent = {};
+
+  for (var i = 0; i < calls.length; i++) {
+    var c = calls[i];
+    if (!c || typeof c !== 'object') continue;
+    var d = durOf(c);
+    totalCalls += 1;
+    totalSec += d;
+    var aid = c.agentId ? String(c.agentId) : '';
+    var key = aid || ('__anon_' + i);
+    var agg = byAgent[key];
+    if (!agg) {
+      agg = {
+        agentId: aid,
+        agentName: displayName(aid, c.agentName),
+        number: c.number ? String(c.number) : '',
+        calls: 0,
+        seconds: 0,
+        byHour: new Array(24).fill(0)
+      };
+      byAgent[key] = agg;
+    }
+    agg.calls += 1;
+    agg.seconds += d;
+    if (!agg.number && c.number) agg.number = String(c.number);
+    var h = new Date(c.startedAt).getHours();
+    if (isFinite(h) && h >= 0 && h <= 23) agg.byHour[h] += 1;
+  }
+
+  var agents = Object.keys(byAgent).map(function (k) {
+    var a = byAgent[k];
+    return {
+      agentId: a.agentId,
+      name: a.agentName,
+      calls: a.calls,
+      avgSecs: a.calls ? Math.round(a.seconds / a.calls) : 0,
+      byHour: a.byHour
+    };
+  });
+  agents.sort(function (a, b) {
+    if (b.calls !== a.calls) return b.calls - a.calls;
+    var ba = b.calls ? b.avgSecs * b.calls : 0;
+    var aa = a.calls ? a.avgSecs * a.calls : 0;
+    return ba - aa;
+  });
+
+  return {
+    agents: agents,
+    totals: { calls: totalCalls, minutes: Math.round(totalSec / 60) }
+  };
+}
+
+module.exports = { computeStats: computeStats, computeAnalytics: computeAnalytics };

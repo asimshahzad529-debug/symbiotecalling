@@ -76,6 +76,10 @@ var handleCustomV7 = apiv7custom.mount(null, {
   keyHashOf: bridge.keyHashOf
 });
 
+/* v8 #3: embed widget API (public widget-config + key-scoped widget settings). */
+var apiv7widget = require('./src/apiv7_widget');
+var handleWidgetV8 = apiv7widget.mount(null, { sendJson: sendJson, dataDir: DATA_DIR, keystore: keystore });
+
 /* Key-aware store instances for REST routes: when the caller identifies
  * with a valid x-key-hash (or ?keyHash=), routes read/write that key's
  * partition; otherwise they fall back to the legacy shared instance. */
@@ -123,6 +127,9 @@ async function handleApi(req, res) {
   // v7 custom-agent API (keyed by x-key-hash). Handled first; returns
   // false for any non-/api/v7/custom-agents path.
   if (await handleCustomV7(req, res)) return;
+  // v8 #3: embed widget API (widget-config is public by design; keyed
+  // settings go through the normal keyHash gating inside the module).
+  if (await handleWidgetV8(req, res)) return;
   // Key-scoped stores for this caller (falls back to the legacy shared
   // instance when no key hash is presented).
   var khHistory = reqHistory(req);
@@ -149,6 +156,19 @@ async function handleApi(req, res) {
   if (p === '/api/stats' && req.method === 'GET') {
     try { return sendJson(res, 200, { stats: statsMod.computeStats(khHistory.list(), khMemory.list()) }); }
     catch (e) { return sendJson(res, 500, { error: 'stats failed' }); }
+  }
+  // v8: key-scoped routes (khMemory/khHistory follow the caller's keyHash).
+  if (p === '/api/v8/appointments' && req.method === 'GET') {
+    try { return sendJson(res, 200, { appointments: khMemory.listAppointments() }); }
+    catch (e) { return sendJson(res, 500, { error: 'read failed' }); }
+  }
+  if (p === '/api/v8/sentiment' && req.method === 'GET') {
+    try { return sendJson(res, 200, { scores: khMemory.listScores() }); }
+    catch (e) { return sendJson(res, 500, { error: 'read failed' }); }
+  }
+  if (p === '/api/v8/analytics' && req.method === 'GET') {
+    try { return sendJson(res, 200, statsMod.computeAnalytics(khHistory.list())); }
+    catch (e) { return sendJson(res, 500, { error: 'analytics failed' }); }
   }
   if (p === '/api/memories' && req.method === 'DELETE') {
     khMemory.clear().then(function () { sendJson(res, 200, { cleared: true }); })
@@ -263,8 +283,11 @@ function serveStatic(req, res) {
 var server = http.createServer(function (req, res) {
   // v7 key-gating routes (they include POSTs, so they must run before the
   // /api/ method split below, which would route POSTs to handlePost).
+  // v8: keygate also owns /api/v8/business-line, /api/v8/missed-calls,
+  // /api/v8/ivr, /api/v8/teams. Other /api/v8/* routes (appointments,
+  // sentiment, analytics, widget-config) fall through to handleApi below.
   if (req.url.startsWith('/api/v7/key/') || req.url.startsWith('/api/v7/audit') || req.url.startsWith('/api/v8/')) {
-    return keygateApi.handle(req, res);
+    if (keygateApi.handle(req, res)) return;
   }
   if (req.url.startsWith('/api/')) {
     if (req.method === 'POST') { handlePost(req, res); return; }

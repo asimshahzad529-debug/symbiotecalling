@@ -20,6 +20,8 @@ var path = require('path');
 var crypto = require('crypto');
 var keystoreMod = require('./keystore');
 var cleanupMod = require('./cleanup');
+var apptsMod = require('./appointments'); // pure parser, no I/O
+var sentimentMod = require('./sentiment'); // pure helpers + async scoring (no cycle: it takes the store as a param)
 
 function sha256(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
 
@@ -173,7 +175,11 @@ MemoryStore.prototype.list = function (keyHash) {
       return {
         id: e.id, agentId: e.agentId, agentName: e.agentName, number: e.number,
         startedAt: e.startedAt, endedAt: e.endedAt, durationSec: e.durationSec,
-        notes: e.notes, noteCount: e.notes.length, turns: e.transcript.length
+        notes: e.notes, noteCount: e.notes.length, turns: e.transcript.length,
+        appointments: apptsMod.entryAppointments(e),
+        sentiment: e.sentiment == null ? null : e.sentiment,
+        leadHotness: e.leadHotness == null ? null : e.leadHotness,
+        sentimentStatus: e.sentimentStatus || null
       };
     });
 };
@@ -205,11 +211,55 @@ MemoryStore.prototype.importAll = async function (arr) {
 /** Set entry.summary (auto call summary). Truncated to 2000 chars. No-op if id not found. */
 MemoryStore.prototype.setSummary = async function (id, summary) {
   var text = String(summary).slice(0, 2000);
+  var self = this;
   await this._atomic(function (all) {
     var e = all.find(function (x) { return x.id === id; });
     if (e) e.summary = text;
     return { next: all };
   });
+  // v8 #11: score caller sentiment + lead hotness now that the summary
+  // persisted. Fire-and-forget — never breaks saving.
+  try {
+    sentimentMod.scoreAndSave(self, id, text).catch(function () {});
+  } catch (e) { /* non-fatal, saving already succeeded */ }
+};
+
+/**
+ * Persist v8 #11 sentiment/lead scores on an entry.
+ * scores: { sentiment: -1..1|null, leadHotness: 0..1|null, status }.
+ * No-op if the entry is not found.
+ */
+MemoryStore.prototype.setScores = async function (id, scores) {
+  var s = scores || {};
+  await this._atomic(function (all) {
+    var e = all.find(function (x) { return x.id === id; });
+    if (e) {
+      e.sentiment = s.sentiment == null ? null : Number(s.sentiment);
+      e.leadHotness = s.leadHotness == null ? null : Number(s.leadHotness);
+      e.sentimentStatus = String(s.status || 'unscored');
+      e.scoredAt = new Date().toISOString();
+    }
+    return { next: all };
+  });
+};
+
+/**
+ * v8 #5: upcoming appointments parsed from "APPOINTMENT:" note lines,
+ * across entries, sorted by time ascending. Same keyHash semantics as
+ * list(). Shape: [{ id, agentId, agentName, title, at, note, callId,
+ * memoryId, noteAt }].
+ */
+MemoryStore.prototype.listAppointments = function (keyHash) {
+  var all = this._readJson(this.file, '[]');
+  var entries = all.filter(function (e) { return !keyHash || e.keyHash === keyHash; });
+  return apptsMod.listAppointments(entries);
+};
+
+/** v8 #11: scored entries in the GET /api/v8/sentiment contract shape. */
+MemoryStore.prototype.listScores = function (keyHash) {
+  var all = this._readJson(this.file, '[]');
+  var entries = all.filter(function (e) { return !keyHash || e.keyHash === keyHash; });
+  return sentimentMod.scoresFromEntries(entries);
 };
 
 /**

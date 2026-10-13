@@ -1,5 +1,6 @@
 'use strict';
-/* public/directory.js — v7.0.0 WS4 "Directory UX".
+/* public/directory.js — v7.0.0 WS4 "Directory UX" (+ v8.0.0 W4: #39 pinned
+ * favorites, #40 smart home greeting).
  *
  * window.Directory: searchable/filterable agent directory with profile sheets
  * and swipe gestures. Pure logic is exported for node tests; DOM work runs
@@ -91,6 +92,83 @@
       minutes: Math.round(secs / 60),
       lastOutcome: last ? (last.outcome || last.status || '—') : '—'
     };
+  }
+
+  /* ---------- v8.0.0 W4: pinned favorites (#39) + smart greeting (#40) ----------
+   * Pure, node-testable helpers. Browser storage lives further down. */
+
+  // greetingForHour(h) — 0..23 -> time-of-day greeting label.
+  function greetingForHour(h) {
+    h = Number(h);
+    if (!isFinite(h)) return 'Good evening';
+    h = ((Math.floor(h) % 24) + 24) % 24;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  // Pinned-favorite storage: one localStorage partition per API key so one
+  // key's pins never leak into another key's view (same isolation model as
+  // dialer recents in callx.js).
+  var PINS_LS_PREFIX = 'sym-v8-pins_';
+  function pinsStorageKey(keyHash) {
+    return PINS_LS_PREFIX + (keyHash ? String(keyHash) : 'shared');
+  }
+  // normalizePinList(v) -> array of unique non-empty id strings, order kept.
+  function normalizePinList(v) {
+    if (!Array.isArray(v)) return [];
+    var out = [];
+    v.forEach(function (x) {
+      var s = String(x == null ? '' : x).trim();
+      if (s && out.indexOf(s) === -1) out.push(s);
+    });
+    return out;
+  }
+  // toggleInList(list, id) -> { list, pinned } (pure; does not mutate input).
+  function toggleInList(list, id) {
+    var l = normalizePinList(list);
+    var s = String(id == null ? '' : id);
+    var i = l.indexOf(s);
+    if (i === -1) { l.push(s); return { list: l, pinned: true }; }
+    l.splice(i, 1);
+    return { list: l, pinned: false };
+  }
+  // agentKey(a) — stable identity used for pins (falls back to number/name).
+  function agentKey(a) {
+    if (!a) return '';
+    return String(a.id || a.number || a.name || '');
+  }
+
+  // suggestAgents(recents, agents, statsTop, n) — rank suggested agents.
+  // recents: dialer recents [{agentId,...}] most-recent-first (per-key scoped
+  //   by CallX.recents). statsTop: /api/stats topAgents [{agentId}].
+  // Both signals are recency/frequency weighted; returns up to n agent objects.
+  function suggestAgents(recents, agents, statsTop, n) {
+    n = Math.max(1, Number(n) || 3);
+    var counts = {};
+    (Array.isArray(recents) ? recents : []).forEach(function (r, i) {
+      var id = r && (r.agentId || r.id);
+      if (!id) return;
+      id = String(id);
+      counts[id] = (counts[id] || 0) + (20 - Math.min(i, 19));
+    });
+    (Array.isArray(statsTop) ? statsTop : []).forEach(function (t, i) {
+      var id = t && (t.agentId || t.id);
+      if (!id) return;
+      id = String(id);
+      counts[id] = (counts[id] || 0) + ((5 - Math.min(i, 4)) * 3);
+    });
+    var byId = {};
+    (Array.isArray(agents) ? agents : []).forEach(function (a) {
+      var k = a && agentKey(a);
+      if (k) byId[k] = a;
+    });
+    var ranked = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    var out = [];
+    ranked.forEach(function (id) {
+      if (byId[id] && out.length < n) out.push(byId[id]);
+    });
+    return out;
   }
 
   /* ---------- browser-only DOM helpers ---------- */
@@ -281,9 +359,110 @@
   var filters = { q: '', gender: 'any', role: 'any' };
   var lastAgents = [];
   var lastOpts = {};
+  var lastContainer = null; // v8: rerender target for pin toggles
+
+  /* ---------- v8 pins: browser storage (per API key) ---------- */
+  var pins = { keyHash: null, ids: [] };
+  function currentKeyHashSync() {
+    try {
+      if (global.KeyGate && global.KeyGate._keyHash) return String(global.KeyGate._keyHash);
+    } catch (e) {}
+    return null;
+  }
+  function loadPinIds(keyHash) {
+    if (!isBrowser()) return [];
+    try {
+      var raw = localStorage.getItem(pinsStorageKey(keyHash));
+      return normalizePinList(raw ? JSON.parse(raw) : []);
+    } catch (e) { return []; }
+  }
+  function savePins() {
+    if (!isBrowser()) return;
+    try { localStorage.setItem(pinsStorageKey(pins.keyHash), JSON.stringify(pins.ids)); }
+    catch (e) {}
+  }
+  function isPinned(id) { return pins.ids.indexOf(String(id == null ? '' : id)) !== -1; }
+  // resolvePinsKeyHash(cb) — async: prefer KeyGate.getKeyHash(), fall back to
+  // the sync _keyHash. Re-renders the grid when the partition changes.
+  function resolvePinsKeyHash(cb) {
+    if (!isBrowser()) { if (cb) cb(pins.ids); return; }
+    function done(kh) {
+      if (kh && kh !== pins.keyHash) { pins.keyHash = kh; pins.ids = loadPinIds(kh); }
+      if (typeof cb === 'function') cb(pins.ids);
+    }
+    try {
+      if (global.KeyGate && typeof global.KeyGate.getKeyHash === 'function') {
+        global.KeyGate.getKeyHash().then(done).catch(function () { done(currentKeyHashSync()); });
+        return;
+      }
+    } catch (e) {}
+    done(currentKeyHashSync());
+  }
+
+  var PIN_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.2 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></svg>';
+
+  /* ---------- v8: smart greeting banner (#40) ---------- */
+  function apiFetchLocal(u) {
+    try {
+      if (global.KeyGate && typeof global.KeyGate.apiFetch === 'function') return global.KeyGate.apiFetch(u);
+    } catch (e) {}
+    return fetch(u);
+  }
+  function readDialerRecents() {
+    try {
+      if (global.CallX && global.CallX.recents && typeof global.CallX.recents.list === 'function')
+        return global.CallX.recents.list();
+    } catch (e) {}
+    return [];
+  }
+  var cachedStatsTop = [];
+  function buildGreetingBanner() {
+    var b = el('div', 'dir-greet');
+    var line = el('div', 'dir-greet-line');
+    var h = new Date().getHours();
+    line.appendChild(el('span', 'dir-greet-ico', '👋'));
+    line.appendChild(el('span', 'dir-greet-text', greetingForHour(h) + ' — who should we call?'));
+    b.appendChild(line);
+    var chips = el('div', 'dir-greet-chips');
+    chips.setAttribute('data-role', 'suggestions');
+    b.appendChild(chips);
+    return b;
+  }
+  function renderSuggestionChips() {
+    if (!isBrowser() || !lastContainer) return;
+    var box = lastContainer.querySelector('[data-role="suggestions"]');
+    if (!box) return;
+    var sug = suggestAgents(readDialerRecents(), lastAgents, cachedStatsTop, 3);
+    box.innerHTML = '';
+    if (!sug.length) {
+      box.appendChild(el('span', 'dir-chip-empty tiny dim', 'Your most-called agents will appear here.'));
+      return;
+    }
+    box.appendChild(el('span', 'dir-chip-lbl tiny dim', 'Suggested:'));
+    sug.forEach(function (a) {
+      var c = el('button', 'dir-chip', a.name || 'Agent');
+      c.type = 'button';
+      c.title = a.niche ? (a.niche + ' — tap to call') : 'Tap to call';
+      c.onclick = function () {
+        sfxTap();
+        if (typeof lastOpts.onCall === 'function') lastOpts.onCall(a);
+      };
+      box.appendChild(c);
+    });
+  }
+  function refreshSuggestions() {
+    renderSuggestionChips();
+    // Enhance with /api/stats most-called when available (best-effort).
+    apiFetchLocal('api/stats').then(function (r) { return r.json(); }).then(function (j) {
+      var s = j && j.stats;
+      cachedStatsTop = (s && s.topAgents) || [];
+      renderSuggestionChips();
+    }).catch(function () {});
+  }
 
   // Build one agent card using the same markup/classes as app.js renderAgents:
   // .acard > (.a-top > .avatar + (.a-name, .a-niche)) + .a-num.mono + .a-tag + .btn.call
+  // v8: + a pin/unpin star button (top-right) feeding the "Pinned" row (#39).
   function buildCard(agent, opts) {
     var d = el('div', 'acard dir-card');
     if (agent.isCustom) d.classList.add('custom');
@@ -304,6 +483,24 @@
     d.appendChild(el('div', 'a-tag', agent.tagline || ''));
     var hint = el('div', 'dir-swipe-hint tiny dim', 'swipe → call · swipe ← profile');
     d.appendChild(hint);
+
+    // v8 pin toggle — stopPropagation so the pin click never opens the sheet.
+    var key = agentKey(agent);
+    var pinBtn = el('button', 'dir-pin' + (isPinned(key) ? ' on' : ''));
+    pinBtn.type = 'button';
+    pinBtn.innerHTML = PIN_SVG;
+    pinBtn.setAttribute('aria-label', (isPinned(key) ? 'Unpin ' : 'Pin ') + (agent.name || 'agent'));
+    pinBtn.setAttribute('aria-pressed', isPinned(key) ? 'true' : 'false');
+    pinBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      sfxTap();
+      var r = toggleInList(pins.ids, key);
+      pins.ids = r.list;
+      savePins();
+      if (lastContainer) rerenderGrid(lastContainer);
+    });
+    d.appendChild(pinBtn);
 
     d.addEventListener('click', function () {
       sfxTap();
@@ -345,15 +542,41 @@
     var grid = container.querySelector('.dir-grid');
     if (!grid) return;
     var list = filterAgents(lastAgents, filters);
+    // v8 #39: pinned agents (in pin order) lift into a "Pinned" row above
+    // the main grid; they are excluded from the grid itself.
+    var pinOrder = {};
+    pins.ids.forEach(function (id, i) { pinOrder[id] = i; });
+    var pinned = [], rest = [];
+    list.forEach(function (a) {
+      (pinOrder[agentKey(a)] != null ? pinned : rest).push(a);
+    });
+    pinned.sort(function (a, b) { return pinOrder[agentKey(a)] - pinOrder[agentKey(b)]; });
+
+    var sec = container.querySelector('.dir-pinned-sec');
+    if (sec && sec.parentNode) sec.parentNode.removeChild(sec);
+    if (pinned.length) {
+      sec = el('div', 'dir-pinned-sec');
+      var head = el('div', 'dir-pinned-head');
+      var star = el('span', 'dir-pinned-star');
+      star.innerHTML = PIN_SVG;
+      head.appendChild(star);
+      head.appendChild(el('span', null, 'Pinned'));
+      sec.appendChild(head);
+      var row = el('div', 'dir-grid dir-pinned-row');
+      pinned.forEach(function (a) { row.appendChild(buildCard(a, lastOpts)); });
+      sec.appendChild(row);
+      container.insertBefore(sec, grid);
+    }
+
     grid.innerHTML = '';
-    list.forEach(function (a) { grid.appendChild(buildCard(a, lastOpts)); });
+    rest.forEach(function (a) { grid.appendChild(buildCard(a, lastOpts)); });
     if (!list.length) grid.appendChild(el('p', 'dim', 'No agents match.'));
   }
 
   // renderDirectory(container, agents, opts)
   // opts: { onCall(agent), onProfile(agent), stats, initialQ }
-  // Renders the toolbar (search box only, v7.5 — the gender/role dropdowns
-  // were removed) and the filtered card grid.
+  // Renders the greeting banner (#40), the toolbar (search box only, v7.5),
+  // the "Pinned" row (#39) and the filtered card grid.
   function renderDirectory(container, agents, opts) {
     if (!isBrowser() || !container) return;
     opts = opts || {};
@@ -363,13 +586,31 @@
       onProfile: opts.onProfile,
       stats: opts.stats || {}
     };
+    lastContainer = container;
     if (opts.initialQ != null) filters.q = String(opts.initialQ);
+    // Sync partition check (async resolution below corrects after key switch).
+    var skh = currentKeyHashSync();
+    if (skh && skh !== pins.keyHash) { pins.keyHash = skh; pins.ids = loadPinIds(skh); }
     container.innerHTML = '';
     container.classList.add('dir-wrap');
+    container.appendChild(buildGreetingBanner());
     container.appendChild(buildToolbar(container, lastAgents));
     var grid = el('div', 'dir-grid');
+    grid.setAttribute('aria-label', 'All agents');
     container.appendChild(grid);
     rerenderGrid(container);
+    resolvePinsKeyHash(function () { if (lastContainer === container) rerenderGrid(container); });
+    refreshSuggestions();
+  }
+
+  // refreshPins() — public: re-resolve the active key's pin partition and
+  // re-render. Safe to call from a key-switch hook; no-op without a container.
+  function refreshPins() {
+    if (!isBrowser()) return;
+    resolvePinsKeyHash(function () {
+      if (lastContainer) rerenderGrid(lastContainer);
+      renderSuggestionChips();
+    });
   }
 
   var Directory = {
@@ -380,10 +621,29 @@
     profileSheet: profileSheet,
     closeSheet: closeSheet,
     renderDirectory: renderDirectory,
+    refreshPins: refreshPins,
+    // v8 pure helpers (node-testable)
+    greetingForHour: greetingForHour,
+    normalizePinList: normalizePinList,
+    toggleInList: toggleInList,
+    pinsStorageKey: pinsStorageKey,
+    agentKey: agentKey,
+    suggestAgents: suggestAgents,
     _SWIPE_MIN_PX: SWIPE_MIN_PX
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Directory;
   global.Directory = Directory;
+
+  // v8: resolve the active key's pin partition once the page is up so the
+  // Pinned row reflects the current key even if renderDirectory ran before
+  // the key hash was available.
+  if (isBrowser()) {
+    document.addEventListener('DOMContentLoaded', function () {
+      resolvePinsKeyHash(function () {
+        if (lastContainer) rerenderGrid(lastContainer);
+      });
+    });
+  }
 
 })((typeof window !== 'undefined') ? window : global);
