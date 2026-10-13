@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Symbiote Calling — AI calling agents</title>
-<link rel="icon" type="image/jpeg" href="/avatars/symagent.jpg">
+<link rel="icon" type="image/png" href="/favicon-circle.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,6 +13,10 @@
 <link rel="stylesheet" href="custom-agents.css">
 <link rel="stylesheet" href="directory.css">
 <link rel="stylesheet" href="callx.css">
+<link rel="stylesheet" href="motion.css">
+<link rel="stylesheet" href="tour.css">
+<link rel="stylesheet" href="palette.css">
+<link rel="stylesheet" href="theme-builder.css">
 </head>
 <body>
 <header class="topbar">
@@ -23,7 +27,7 @@
     <button data-view="dashboard" type="button">Dashboard</button>
     <button data-view="dialer" type="button">Dialer</button>
     <button data-view="memory" type="button">Memory</button>
-    <a class="tab-link" href="docs.html">Docs</a>
+    <a class="tab-link" href="docs.html">Guide</a>
     <button data-view="settings" type="button">Settings</button>
   </nav>
   <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle dark / light mode"></button>
@@ -103,19 +107,17 @@
   </section>
 </main>
 
-<!-- ============ CALL OVERLAY : phone UI ============ -->
+<!-- ============ CALL OVERLAY : cinematic phone UI (v8) ============ -->
 <div id="callOverlay" class="overlay hidden" aria-hidden="true">
-  <div class="phone">
-    <div class="island"></div>
-    <div class="p-statusbar"><span id="pClock" class="mono">9:41</span><span class="mono p-sig">5G&nbsp;&nbsp;▰▰▰▰&nbsp;&nbsp;▮</span></div>
+  <div class="phone" id="phoneUi">
+    <div class="p-statusbar"><span id="pClock" class="mono">9:41</span><span class="mono p-sig">SYMBIOTE&nbsp;LIVE</span></div>
 
     <div class="p-agent">
       <div class="p-avatar" id="pAvatar">◈</div>
       <div class="p-name" id="pName">—</div>
       <div class="p-number mono dim" id="pNumber">—</div>
       <div class="p-state" id="pState">Dialing…</div>
-      <div class="eq hidden" id="pEq" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-      <div class="rec-ind hidden" id="pRec" title="This call is being recorded on your device"><span class="rec-dot"></span><span class="mono" id="pRecTime">00:00</span></div>
+      <div class="eq idle" id="pEq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
     </div>
 
     <div class="p-controls">
@@ -131,14 +133,18 @@
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg>
         <label>Chat</label>
       </button>
-      <button class="p-btn" id="pMin" type="button" aria-label="minimize call">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <label>Minimize</label>
-      </button>
     </div>
     <div class="p-hangup-row">
+      <button class="p-round hidden" id="pTransfer" type="button" aria-label="Transfer to a specialist">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 7H8a4 4 0 0 0-4 4"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h13a4 4 0 0 0 4-4"/></svg>
+        <label>Transfer</label>
+      </button>
       <button class="p-hangup" id="pHangup" type="button" aria-label="End call">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>
+      </button>
+      <button class="p-round" id="pFocus" type="button" aria-label="Toggle focus mode">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4"/><path d="M15 4h4a1 1 0 0 1 1 1v4"/><path d="M20 15v4a1 1 0 0 1-1 1h-4"/><path d="M9 20H5a1 1 0 0 1-1-1v-4"/></svg>
+        <label>Focus</label>
       </button>
     </div>
     <div class="meter"><div id="pMeter"></div></div>
@@ -158,6 +164,12 @@
         </button>
       </div>
     </div>
+
+    <div class="sheet transfer-sheet hidden" id="transferSheet">
+      <div class="sheet-head"><span>Transfer to a specialist</span><button class="icon-btn sm" id="transferClose" type="button" aria-label="Close transfer"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>
+      <input id="transferFilter" type="text" placeholder="Search specialists…" autocomplete="off">
+      <div class="transfer-list" id="transferList"></div>
+    </div>
   </div>
 </div>
 
@@ -172,5 +184,10 @@
 <script src="greeting.js"></script>
 <script src="hygiene.js"></script>
 <script src="app.js"></script>
+<script src="tour.js"></script>
+<script src="palette.js"></script>
+<script src="analytics.js"></script>
+<script src="timeline.js"></script>
+<script src="theme-builder.js"></script>
 </body>
 </html>

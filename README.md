@@ -1,4 +1,4 @@
-# Symbiote Calling — v7.5.0
+# Symbiote Calling — v8.0.0
 
 Dial 101 AI calling agents from a phone-style UI, powered by Gemini Live — or build your own. Each agent has its own fictional number; pick from the directory, punch it into the dialer, and a phone UI opens with a live voice call, timer, keypad, and chat. Agents remember you: every call saves notes, appointments, and a transcript to the Memory page, and agents recall past calls when you ring again.
 
@@ -20,6 +20,28 @@ npm run dev
 8. **Docs** tab: the full user guide (also at `/docs.html`).
 
 > Mic permission is requested only when a call starts. If the mic is unavailable, the call continues in chat mode — the agent still answers by voice.
+
+## What's new in v8.0.0
+
+**📞 Per-key virtual business line (the big one).** Every API key now gets its own fictional front-door number (e.g. `+1 (555) 014-XXXX`, deterministic per key). Widget calls land on it → IVR menu → smart routing to the right agent. Missed calls are logged with auto-callback scheduling. Numbers stay fictional (no PSTN); the backend is structured so a real telephony provider can plug in later without a rewrite.
+
+**🧭 Step-by-step agent onboarding.** The long "New custom agent" form is now a 7-step wizard: Name → Number → Role → Tone (4 cards) → Voice → Prompt → Review → Create. Progress bar, per-step validation, instant appearance in the list.
+
+**📇 Website embed widget.** A tiny JS snippet renders a floating "Call us" button on any site; visitors tap it and land on your business line.
+
+**🤖 IVR + agent teams.** The business line answers with a DTMF menu ("Sales ke liye 1…") routing to mapped agents; a receptionist agent can assess the need and auto-transfer to the right specialist.
+
+**📅 Appointments, 😊 sentiment, 📊 analytics.** Agents capture appointments via notes (surfaced in Memory + API); every call gets sentiment + lead-hotness scoring; the Dashboard shows per-agent totals, avg duration, and busy-hours charts, plus a filterable call timeline and drag-drop customizable cards.
+
+**✨ Phone UI upgrades.** Cinematic full-screen call screen, live voice waveform (who's speaking), swipe-to-hang-up, quick transfer button on SymAgent calls, ambient avatar glow, focus mode, and Light/Dark/System theme. Minimize button and the red-dot recording indicator are gone (recording itself still works).
+
+**🎛️ Personalization.** Pinned favorite agents, smart home greeting with per-key suggestions, a theme builder (brand colors + presets), and a premium motion design system.
+
+**📖 Guide center.** The docs page is now a Stripe-style guide center: sidebar nav, instant search, interactive walkthroughs, embedded demos, per-article feedback. Plus a command palette (Ctrl+K) and a first-run onboarding tour.
+
+**🖼️ Circular favicon.** The site icon is now a rounded version of SymAgent's avatar.
+
+**🔧 Fixes.** Clone dropdown removed from Custom Agents; Gemini Live errors now surface as friendly messages on the call UI instead of silent failure.
 
 ## What's new in v7.5.0 (fixing release — no new features)
 

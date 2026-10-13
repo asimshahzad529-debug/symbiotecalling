@@ -6,31 +6,57 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
 
-  /* ---------- theme ---------- */
+  /* ---------- theme: Light / Dark / System (v8 #41) ---------- */
   var ICON_SUN = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><line x1="12" y1="2.5" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="21.5" y2="12"/><line x1="4.9" y1="4.9" x2="7" y2="7"/><line x1="17" y1="17" x2="19.1" y2="19.1"/><line x1="4.9" y1="19.1" x2="7" y2="17"/><line x1="17" y1="7" x2="19.1" y2="4.9"/></svg>';
   var ICON_MOON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8.5 8.5 0 0 1 10.5 4 8.5 8.5 0 1 0 20 13.5z"/></svg>';
+  var ICON_AUTO = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12.5" rx="2"/><line x1="9" y1="21" x2="15" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
   var ICON_PHONE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>';
-  function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
-  function applyTheme(t) {
-    document.documentElement.setAttribute('data-theme', t);
-    $('themeToggle').innerHTML = t === 'dark' ? ICON_SUN : ICON_MOON;
-    $('themeToggle').setAttribute('aria-label', t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
-    var cb = $('themeDefault'); if (cb) cb.checked = (t === 'dark');
-    try { localStorage.setItem('symbiote-theme', t); } catch (e) {}
+  var THEME_KEY = 'symbiote-theme';
+  var themeChoice = 'light'; // 'light' | 'dark' | 'system' — persisted
+  var themeMq = (typeof window.matchMedia === 'function') ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function effectiveTheme() {
+    if (themeChoice === 'system' && themeMq) return themeMq.matches ? 'dark' : 'light';
+    return themeChoice === 'dark' ? 'dark' : 'light';
   }
+  function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+  /* The STORED choice is light|dark|system; data-theme on <html> stays
+   * light|dark (the effective theme) so all CSS vars keep working. */
+  function applyThemeChoice(choice) {
+    if (choice !== 'light' && choice !== 'dark' && choice !== 'system') choice = 'light';
+    themeChoice = choice;
+    var t = effectiveTheme();
+    document.documentElement.setAttribute('data-theme', t);
+    var tt = $('themeToggle');
+    tt.innerHTML = choice === 'system' ? ICON_AUTO : (t === 'dark' ? ICON_SUN : ICON_MOON);
+    tt.setAttribute('aria-label', 'Theme: ' + choice + ' (showing ' + t + ') — tap to change');
+    var cb = $('themeDefault'); if (cb) cb.checked = (t === 'dark');
+    try { localStorage.setItem(THEME_KEY, choice); } catch (e) {}
+  }
+  /* v7 name kept for compat: applies a plain light/dark choice. */
+  function applyTheme(t) { applyThemeChoice(t === 'dark' ? 'dark' : 'light'); }
   var settings = { apiKey: '', model: 'gemini-3.8-live', mic: true };
   try {
     var saved = JSON.parse(localStorage.getItem('symbiote-calling') || '{}');
     if (saved.model) settings.model = saved.model;
     if (typeof saved.mic === 'boolean') settings.mic = saved.mic;
-    applyTheme(localStorage.getItem('symbiote-theme') || 'light');
-  } catch (e) { applyTheme('light'); }
+    applyThemeChoice(localStorage.getItem(THEME_KEY) || 'light');
+  } catch (e) { applyThemeChoice('light'); }
   function persistSettings() {
     try { localStorage.setItem('symbiote-calling', JSON.stringify({ model: settings.model, mic: settings.mic })); } catch (e) {}
   }
-  $('themeToggle').onclick = function () { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); };
+  /* Toggle cycles Light → Dark → System. System follows the OS
+   * prefers-color-scheme and updates live when it changes. */
+  $('themeToggle').onclick = function () {
+    var next = themeChoice === 'light' ? 'dark' : (themeChoice === 'dark' ? 'system' : 'light');
+    applyThemeChoice(next);
+  };
+  if (themeMq) {
+    var onOsTheme = function () { if (themeChoice === 'system') applyThemeChoice('system'); };
+    if (typeof themeMq.addEventListener === 'function') themeMq.addEventListener('change', onOsTheme);
+    else if (typeof themeMq.addListener === 'function') themeMq.addListener(onOsTheme);
+  }
   var themeCb = $('themeDefault');
-  if (themeCb) themeCb.onchange = function (e) { applyTheme(e.target.checked ? 'dark' : 'light'); };
+  if (themeCb) themeCb.onchange = function (e) { applyThemeChoice(e.target.checked ? 'dark' : 'light'); };
 
   /* ---------- tabs (v7: Agents / Custom Agents / Dashboard / Dialer /
      Agents / Custom Agents / Dashboard / Dialer / Memory / Docs(link) / Settings) ---------- */
@@ -426,7 +452,7 @@
       var mems = ((await (await apiFetch('api/memories')).json()).memories) || [];
       var calls = ((await (await apiFetch('api/history')).json()).calls) || [];
       var payload = JSON.stringify({
-        app: 'symbiote-calling', version: '7.5.0',
+        app: 'symbiote-calling', version: '8.0.0',
         exportedAt: new Date().toISOString(), memories: mems, history: calls
       }, null, 2);
       var blob = new Blob([payload], { type: 'application/json' });
@@ -627,21 +653,13 @@
       var tracks = recDest.stream.getAudioTracks().slice();
       if (micStream) { var mt = micStream.getAudioTracks()[0]; if (mt) tracks.push(mt); }
       recorder = new CallRecorder();
-      if (recorder.start(new MediaStream(tracks))) {
-        $('pRecTime').textContent = '00:00';
-        $('pRec').classList.remove('hidden');
-      } else { recorder = null; recDest = null; }
+      // v8 F4: the on-device recording indicator is gone — recording runs
+      // silently (recorder.js untouched); the file downloads from the
+      // Memory entry after the call.
+      if (!recorder.start(new MediaStream(tracks))) { recorder = null; recDest = null; }
     } catch (e) { recorder = null; recDest = null; }
   }
-  function recTick() {
-    if (recorder && recorder.getState() === 'recording') {
-      var s = Math.floor(recorder.getElapsedMs() / 1000);
-      var m = Math.floor(s / 60); s %= 60;
-      $('pRecTime').textContent = (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
-    }
-  }
   function stopRecording() {
-    try { $('pRec').classList.add('hidden'); } catch (e) {}
     recDest = null;
     if (!recorder) return Promise.resolve(null);
     var r = recorder; recorder = null;
@@ -700,7 +718,8 @@
     setCallState(fmtTimer(), 'live');
     $('pAvatar').classList.add('ring');
     timerInt = setInterval(function () {
-      setCallState(fmtTimer(), 'live'); recTick();
+      setCallState(fmtTimer(), 'live');
+      waveAgentTick(); // v8 #46: agent audio queue ran dry -> back to idle
       try { if (window.CallX) CallX.quota.check(Math.floor((Date.now() - connectedAt) / 1000)); } catch (e) {}
     }, 1000);
   }
@@ -710,6 +729,66 @@
     greetingDone = true;
     if (greetFallbackT) { clearTimeout(greetFallbackT); greetFallbackT = null; }
     if (workletNode && !muted) workletNode.port.postMessage({ muted: false });
+  }
+
+  /* ---------- v8 #46/#49: live voice waveform + ambient avatar glow ----------
+   * waveSet('agent') while agent audio plays (playChunk), waveSet('user')
+   * while the mic hears the user (worklet levels), 'idle' otherwise. The
+   * eq bars are JS-driven (rAF) so their height follows the real level;
+   * #pAvatar glows/pulses while the AGENT speaks (wave-agent) and shifts
+   * to a subtler glow while the USER speaks (wave-user).
+   * UNVERIFIED-LIVE: timing against real Live audio needs a real-key
+   * call to confirm. */
+  var waveMode = 'idle', waveLevel = 0, waveBars = [], waveRunning = false, waveT0 = 0;
+  function waveInitBars() {
+    if (waveBars.length) return;
+    var eq = $('pEq');
+    if (!eq) return;
+    waveBars = Array.prototype.slice.call(eq.querySelectorAll('span'));
+  }
+  function waveSet(mode, level) {
+    waveMode = (mode === 'agent' || mode === 'user') ? mode : 'idle';
+    if (typeof level === 'number') waveLevel = Math.max(0, Math.min(1, level));
+    var eq = $('pEq'), av = $('pAvatar');
+    if (!eq || !av) return;
+    eq.classList.toggle('wave-agent', waveMode === 'agent');
+    eq.classList.toggle('wave-user', waveMode === 'user');
+    eq.classList.toggle('idle', waveMode === 'idle');
+    av.classList.toggle('wave-agent', waveMode === 'agent');
+    av.classList.toggle('wave-user', waveMode === 'user');
+  }
+  function waveStart() {
+    waveInitBars();
+    waveSet('idle', 0);
+    if (waveRunning) return;
+    waveRunning = true; waveT0 = performance.now();
+    requestAnimationFrame(waveLoop);
+  }
+  function waveStop() { waveRunning = false; }
+  function waveLoop(now) {
+    if (!waveRunning) return;
+    var t = ((now || performance.now()) - waveT0) / 1000;
+    var speed = waveMode === 'agent' ? 9 : 5;
+    for (var i = 0; i < waveBars.length; i++) {
+      var b = waveBars[i];
+      if (waveMode === 'idle') { b.style.height = '5px'; continue; }
+      var amp = 0.35 + 0.65 * waveLevel;
+      var h = 6 + amp * 30 * (0.45 + 0.55 * Math.abs(Math.sin(t * speed + i * 0.9)));
+      b.style.height = Math.round(h) + 'px';
+    }
+    requestAnimationFrame(waveLoop);
+  }
+  /* Mic level (0..~1 after the *400 normalization used for the meter). */
+  function waveMicTick(level) {
+    if (!ws) return;
+    var v = Math.min(1, Math.max(0, Number(level || 0) * 400));
+    if (v > 0.03) waveSet('user', v);
+    else if (waveMode === 'user') waveSet('idle', 0);
+  }
+  /* Agent audio is queued ahead of playback (nextPlayTime); when the queue
+   * runs dry the agent has stopped speaking. Checked on the 1s timer tick. */
+  function waveAgentTick() {
+    if (waveMode === 'agent' && playCtx && playCtx.currentTime >= nextPlayTime - 0.05) waveSet('idle', 0);
   }
 
   function setCallState(text, cls) {
@@ -759,13 +838,13 @@
     nextPlayTime += buf.duration;
     activeSources.push(src);
     src.onended = function () { var k = activeSources.indexOf(src); if (k >= 0) activeSources.splice(k, 1); };
-    $('pEq').classList.remove('hidden');
+    waveSet('agent', 0.75); // v8 #46: agent is speaking
   }
   function stopPlayback() {
     activeSources.forEach(function (s) { try { s.stop(); } catch (e) {} });
     activeSources = [];
     if (playCtx) nextPlayTime = playCtx.currentTime;
-    $('pEq').classList.add('hidden');
+    waveSet('idle', 0);
   }
 
   async function startMic() {
@@ -777,7 +856,10 @@
     var src = audioCtx.createMediaStreamSource(micStream);
     workletNode = new AudioWorkletNode(audioCtx, 'omni-capture');
     workletNode.port.onmessage = function (e) {
-      if (e.data && typeof e.data.level === 'number') $('pMeter').style.width = Math.min(100, Math.round(e.data.level * 400)) + '%';
+      if (e.data && typeof e.data.level === 'number') {
+        $('pMeter').style.width = Math.min(100, Math.round(e.data.level * 400)) + '%';
+        waveMicTick(e.data.level); // v8 #46: user is speaking
+      }
       try { if (window.CallX) CallX.meter.micLevel(e.data.level); } catch (err) {}
       if (e.data && e.data.pcm && ws && ws.readyState === 1) {
         var u8 = new Uint8Array(e.data.pcm), bin = '';
@@ -806,10 +888,13 @@
     $('keypadSheet').classList.add('hidden'); $('chatSheet').classList.add('hidden');
     $('pMute').classList.remove('on'); muted = false; greetingDone = false;
     callTranscript = []; callId = null; artifactsDone = false;
-    $('pRec').classList.add('hidden');
     if (greetFallbackT) { clearTimeout(greetFallbackT); greetFallbackT = null; }
-    $('pEq').classList.add('hidden');
     $('pAvatar').classList.remove('ring');
+    waveSet('idle', 0); waveStart(); // v8 #46 waveform on, #49 avatar glow armed
+    // v8 #48: quick transfer is SymAgent-only; revealed when the leg connects.
+    $('pTransfer').classList.add('hidden');
+    $('keypadSheet').classList.add('hidden'); $('chatSheet').classList.add('hidden');
+    $('transferSheet').classList.add('hidden');
     setCallState('Dialing…');
     // v7.5 greeting mask: arm now; its onMask shows "Connecting…" and the
     // live UI is revealed only on first greeting output (see setup_complete).
@@ -873,6 +958,8 @@
           $('pNumber').textContent = msg.agent.number;
           $('pAvatar').innerHTML = avatarHTML(msg.agent);
           setCallState('Connecting…');
+          // v8 #48: quick transfer is SymAgent-only — show it only on her legs.
+          try { $('pTransfer').classList.toggle('hidden', !(msg.agent && msg.agent.id === 'symagent')); } catch (e) {}
         }
         break;
       case 'setup_complete':
@@ -932,7 +1019,7 @@
         sfx('message');
         break;
       case 'audio': if (greetMask && greetMask.isMasking()) greetMask.onAudio('audio'); ungateMic(); playChunk(msg.data, msg.mimeType); break;
-      case 'turn_complete': $('pEq').classList.add('hidden'); break;
+      case 'turn_complete': break; // waveform idles via waveAgentTick once the audio queue drains
       case 'interrupted': stopPlayback(); break;
       case 'call_ended_by':
         setCallState('Call ended');
@@ -942,6 +1029,18 @@
         var diagBox = $('diagBox');
         if (diagBox) diagBox.textContent = JSON.stringify(msg, null, 1);
         break;
+      /* v8 ERR-client: the backend emits {type:'live_error', code, message}
+       * for Gemini Live failures (message is already user-friendly
+       * server-side). Surface it on the call state line AND as a chat
+       * bubble. UNVERIFIED-LIVE: needs a real-key call that triggers a
+       * backend live error (e.g. quota exhaustion) to confirm end-to-end. */
+      case 'live_error': {
+        var liveMsg = String(msg.message || msg.code || 'A call error occurred');
+        setCallState(liveMsg, 'err');
+        chatBubble('omni', liveMsg);
+        if (msg.fatal) setTimeout(teardown, 2200);
+        break;
+      }
       case 'error':
         if (msg.code === 'NO_SUCH_NUMBER') { setCallState('Number not in service', 'err'); setTimeout(teardown, 1800); }
         else if (msg.code === 'NO_KEY') { setCallState('Add your API key in Settings', 'err'); setTimeout(teardown, 2200); }
@@ -954,6 +1053,7 @@
   function endCallUI(text) {
     sfx('hangup');
     finishCallArtifacts();
+    waveStop(); waveSet('idle', 0); // v8 #46/#49: freeze the waveform
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
     if (greetMask) { try { greetMask.reset(); } catch (e) {} greetMask = null; }
     stopPlayback();
@@ -963,6 +1063,8 @@
   }
   function teardown() {
     stopMic(); stopPlayback();
+    waveStop(); waveSet('idle', 0);
+    setFocusMode(false); // v8 #60: never leave focus mode behind
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
     if (greetFallbackT) { clearTimeout(greetFallbackT); greetFallbackT = null; }
     if (ws) { try { ws.close(); } catch (e) {} ws = null; }
@@ -1020,11 +1122,7 @@
     sheet.classList.toggle('hidden');
     if (!sheet.classList.contains('hidden')) setTimeout(function () { $('chatInput').focus(); }, 60);
   };
-  var pMinBtn = $('pMin');
-  if (pMinBtn) pMinBtn.onclick = function () {
-    sfx('tap');
-    try { if (window.CallX) CallX.bubble.minimize(); } catch (e) {}
-  };
+  // v8 F3: the Minimize button was removed entirely — no handler, no markup.
   function sendChat() {
     var t = $('chatInput').value.trim();
     if (!t || !ws || ws.readyState !== 1) return;
@@ -1035,6 +1133,91 @@
   }
   $('chatSend').onclick = sendChat;
   $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+  /* ---------- v8 #48: quick transfer (SymAgent calls only) ----------
+   * One tap on Transfer opens a specialist picker; picking a specialist
+   * reuses the existing transfer flow (handleTransfer): the current leg
+   * closes and the specialist is auto-dialed. The button is only visible
+   * while the current leg's agent is SymAgent (set in onServer 'call'
+   * connecting, hidden on every new startCall).
+   * UNVERIFIED-LIVE: the full leg-handoff timing needs a real-key call. */
+  function isSymAgentLeg() { return !!(callAgent && callAgent.id === 'symagent'); }
+  function buildTransferList(q) {
+    var list = $('transferList');
+    if (!list) return;
+    list.innerHTML = '';
+    var query = String(q || '').trim().toLowerCase();
+    var specs = (AGENTS || []).filter(function (a) { return a && a.id && a.id !== 'symagent'; });
+    if (query) specs = specs.filter(function (a) {
+      return (a.name + ' ' + (a.niche || '') + ' ' + (a.number || '')).toLowerCase().indexOf(query) !== -1;
+    });
+    if (!specs.length) { list.innerHTML = '<p class="dim tiny">No specialists match.</p>'; return; }
+    specs.slice(0, 60).forEach(function (a) {
+      var row = document.createElement('button');
+      row.type = 'button'; row.className = 'transfer-row';
+      row.innerHTML = '<span class="avatar sm"></span><span class="t-info"><span class="t-name"></span><span class="t-num mono dim"></span></span><span class="callx-recent-go">↩</span>';
+      row.querySelector('.avatar').innerHTML = avatarHTML(a);
+      row.querySelector('.t-name').textContent = a.name;
+      row.querySelector('.t-num').textContent = a.number || '';
+      row.onclick = function () {
+        $('transferSheet').classList.add('hidden');
+        handleTransfer({ id: a.id, name: a.name });
+      };
+      list.appendChild(row);
+    });
+  }
+  var pTransferBtn = $('pTransfer');
+  if (pTransferBtn) pTransferBtn.onclick = function () {
+    sfx('tap');
+    if (!isSymAgentLeg() || !ws || ws.readyState !== 1) return;
+    $('keypadSheet').classList.add('hidden'); $('chatSheet').classList.add('hidden');
+    var tf = $('transferFilter'); if (tf) tf.value = '';
+    buildTransferList('');
+    $('transferSheet').classList.remove('hidden');
+    if (tf) setTimeout(function () { tf.focus(); }, 60);
+  };
+  var transferCloseBtn = $('transferClose');
+  if (transferCloseBtn) transferCloseBtn.onclick = function () { $('transferSheet').classList.add('hidden'); };
+  var transferFilterEl = $('transferFilter');
+  if (transferFilterEl) transferFilterEl.addEventListener('input', function (e) { buildTransferList(e.target.value); });
+
+  /* ---------- v8 #60: focus mode ----------
+   * Hides everything except the call UI (topbar + main) for
+   * distraction-free calling; toggling back restores the app. teardown()
+   * always exits focus mode so it never leaks between calls. */
+  function setFocusMode(on) {
+    document.body.classList.toggle('focus-mode', !!on);
+    var fb = $('pFocus'); if (fb) fb.classList.toggle('on', !!on);
+  }
+  var pFocusBtn = $('pFocus');
+  if (pFocusBtn) pFocusBtn.onclick = function () {
+    sfx('tap');
+    setFocusMode(!document.body.classList.contains('focus-mode'));
+  };
+
+  /* ---------- v8 #47: swipe (up or down) on the phone UI ends the call ----------
+   * Swipes starting on interactive elements (sheets, buttons, inputs) are
+   * ignored so chatting/keypad never hangs up by accident. */
+  var swipeStart = null;
+  var phoneEl = $('phoneUi');
+  if (phoneEl) {
+    phoneEl.addEventListener('touchstart', function (e) {
+      var t = e.changedTouches[0];
+      swipeStart = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
+    phoneEl.addEventListener('touchend', function (e) {
+      var s0 = swipeStart; swipeStart = null;
+      if (!s0 || !ws) return;
+      var t = e.changedTouches[0];
+      var dy = t.clientY - s0.y, dx = t.clientX - s0.x;
+      var interactive = e.target && e.target.closest ? e.target.closest('.sheet, button, input, textarea, a') : null;
+      if (interactive) return;
+      if (Math.abs(dy) > 90 && Math.abs(dy) > Math.abs(dx) * 1.6) {
+        var hb = $('pHangup'); if (hb) hb.click(); // same path as the button
+      }
+    }, { passive: true });
+  }
+
   window.addEventListener('beforeunload', function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hangup' })); });
 
   var f = document.createElement('footer'); f.className = 'note';

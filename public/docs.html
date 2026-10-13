@@ -1,289 +1,626 @@
 <!DOCTYPE html>
 <!-- ============================================================================
   CONTRACT FOR INTEGRATOR:
-  Add a "Docs" tab to the nav in public/index.html that links to this page
-  (docs.html). Suggested: a nav button/tab labeled "Docs" pointing to "docs.html".
-  This page is standalone — no changes to app.js, index.html, server.js or src/*
-  were made for it.
+  The nav in public/index.html reaches this page through the "Docs" tab,
+  which points at this exact file: docs.html. This v8 guide center replaces
+  the old docs page in place — no changes to app.js, index.html, server.js or
+  src/* were made for it. Keep this file at public/docs.html.
 ============================================================================= -->
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Symbiote Calling — User Guide</title>
+<title>Symbiote Calling — Guide center</title>
 <link rel="icon" type="image/jpeg" href="/avatars/symagent.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
-/* Docs-only styles. Everything else reuses the app's CSS variables. */
-:root{ --toc-w: 250px; }
-html{scroll-behavior:smooth}
-.docs-top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:1rem;
-  padding:.65rem 1.1rem;background:color-mix(in srgb, var(--bg) 86%, transparent);
-  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.docs-top .brand{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.05rem;white-space:nowrap}
-.docs-top .brand em{font-style:normal;color:var(--acc)}
-.back-link{display:inline-flex;align-items:center;gap:.4rem;font:inherit;font-weight:600;font-size:.85rem;
-  color:var(--ink2);text-decoration:none;border:1px solid var(--line2);border-radius:10px;
-  padding:.45rem .8rem;background:var(--panel);transition:transform .1s,border-color .15s}
+/* Guide center — Stripe-style, theme-aware, reuses app CSS variables. */
+.g-wrap{min-height:100dvh}
+.g-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:.9rem;
+  padding:.6rem 1.1rem;background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.g-top .brand{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.02rem;white-space:nowrap;letter-spacing:-.01em}
+.g-top .brand em{font-style:normal;color:var(--acc)}
+.back-link{display:inline-flex;align-items:center;gap:.45rem;font-weight:600;font-size:.85rem;
+  color:var(--ink2);text-decoration:none;border:1px solid var(--line2);border-radius:11px;
+  padding:.45rem .85rem;background:var(--panel);transition:transform .12s,border-color .15s,color .15s;white-space:nowrap}
 .back-link:hover{border-color:var(--acc);color:var(--ink)}
-.back-link:active{transform:scale(.96)}
-.docs-hero{max-width:1060px;margin:0 auto;padding:2.6rem 1rem 1.6rem;text-align:left}
-.docs-hero .kicker{display:inline-block;font-size:.72rem;letter-spacing:.16em;font-weight:700;
+.back-link:active{transform:scale(.95)}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;
+  border-radius:11px;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);cursor:pointer;
+  transition:transform .12s,border-color .15s,color .15s}
+.icon-btn:hover{border-color:var(--acc);color:var(--ink)}
+.icon-btn:active{transform:scale(.92)}
+/* hero */
+.g-hero{max-width:1160px;margin:0 auto;padding:3.2rem 1.25rem 1.8rem}
+.kicker{display:inline-flex;align-items:center;gap:.45rem;font-size:.72rem;letter-spacing:.16em;font-weight:700;
   color:var(--acc);background:var(--acc-soft);border:1px solid var(--line2);border-radius:99px;
-  padding:.28rem .85rem;margin-bottom:.9rem;text-transform:uppercase}
-.docs-hero h1{font-size:2.2rem;line-height:1.15;margin:.1em 0 .3em;letter-spacing:-.02em}
-.docs-hero h1 em{font-style:normal;color:var(--acc)}
-.docs-hero p.lede{font-size:1.02rem;color:var(--ink2);max-width:640px;margin:0}
-.docs-layout{max-width:1060px;margin:0 auto;padding:0 1rem 5rem;display:flex;gap:2rem;align-items:flex-start}
-.toc{position:sticky;top:64px;flex:0 0 var(--toc-w);max-height:calc(100dvh - 84px);overflow:auto;
-  background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.9rem .95rem;box-shadow:var(--shadow)}
-.toc h4{margin:.1rem 0 .5rem;font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.1rem}
-.toc a{display:flex;gap:.55rem;align-items:baseline;text-decoration:none;color:var(--ink2);
-  font-size:.83rem;padding:.4rem .55rem;border-radius:9px;line-height:1.35}
-.toc a .n{font-family:"Space Grotesk";font-weight:700;color:var(--acc);font-size:.72rem;flex:0 0 1.4em}
-.toc a:hover{background:var(--panel2);color:var(--ink)}
-.toc a.on{background:var(--acc-soft);color:var(--ink)}
-.docs-main{flex:1;min-width:0}
-.dsec{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.5rem 1.6rem;
-  margin-bottom:1.1rem;box-shadow:var(--shadow);scroll-margin-top:76px}
-.dsec-head{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.7rem;flex-wrap:wrap}
-.dsec-num{font-family:"Space Grotesk";font-weight:700;color:var(--acc);font-size:.85rem;letter-spacing:.08em}
-.dsec h2{font-size:1.35rem;margin:0;letter-spacing:-.01em}
-.dsec h3{font-size:1.02rem;margin:1.3rem 0 .4rem;color:var(--ink)}
-.dsec p{margin:.5rem 0;color:var(--ink2);font-size:.92rem}
-.dsec p strong, .dsec li strong{color:var(--ink)}
-.dsec ul,.dsec ol{margin:.45rem 0 .8rem;padding-left:1.25rem;color:var(--ink2);font-size:.92rem}
-.dsec li{margin:.28rem 0}
-.dsec .mono{font-size:.82em;background:var(--panel2);border:1px solid var(--line);
-  border-radius:6px;padding:.08em .4em;white-space:nowrap}
-/* Inline cross-links: accent-tinted, part of the sentence, wrap naturally. */
-.dsec a.xref{color:var(--acc);font-weight:600;text-decoration:none}
-.dsec a.xref:hover{text-decoration:underline}
-/* External URL pills: mono look, but allowed to break mid-URL so they never
-   force an awkward ragged line or overflow on narrow screens. */
-.dsec a.url{font-family:ui-monospace,Menlo,monospace;font-size:.86em;background:var(--panel2);
-  border:1px solid var(--line);border-radius:6px;padding:.08em .4em;color:var(--acc);
-  text-decoration:none;overflow-wrap:anywhere}
-.dsec a.url:hover{border-color:var(--acc)}
-.callout{border:1px solid var(--line2);border-left:3px solid var(--acc);border-radius:10px;
-  background:var(--panel2);padding:.65rem .9rem;margin:.8rem 0;font-size:.88rem;color:var(--ink2)}
-.callout.warn{border-left-color:var(--err)}
-.callout.ok{border-left-color:var(--ok)}
-.callout b{color:var(--ink)}
-.steps{list-style:none;margin:.6rem 0;padding:0;counter-reset:st;display:flex;flex-direction:column;gap:.55rem}
-.steps li{counter-increment:st;display:flex;gap:.75rem;align-items:flex-start;font-size:.92rem;color:var(--ink2)}
-.steps li::before{content:counter(st);flex:0 0 1.7em;width:1.7em;height:1.7em;border-radius:50%;
-  background:var(--acc-soft);color:var(--acc);font-weight:700;font-size:.8rem;
-  display:inline-flex;align-items:center;justify-content:center;font-family:"Space Grotesk"}
-.faq dt{font-weight:700;color:var(--ink);font-size:.94rem;margin:1rem 0 .25rem}
-.faq dd{margin:0 0 .4rem;color:var(--ink2);font-size:.9rem}
-kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:var(--panel2);
-  border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:.08rem .45rem}
-.dsec table{width:100%;border-collapse:collapse;font-size:.87rem;margin:.6rem 0}
-.dsec th,.dsec td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--line)}
-.dsec th{color:var(--muted);font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.06em}
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
-@media(max-width:820px){
-  .toc{display:none}
-  .two-col{grid-template-columns:1fr}
-  .docs-hero h1{font-size:1.7rem}
+  padding:.32rem .95rem;margin-bottom:1rem;text-transform:uppercase}
+.g-hero h1{font-size:clamp(1.9rem,4.4vw,2.9rem);line-height:1.12;margin:.1em 0 .35em;letter-spacing:-.025em;font-weight:700}
+.g-hero h1 em{font-style:normal;background:linear-gradient(100deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.g-hero p.lede{font-size:1.06rem;color:var(--ink2);max-width:660px;margin:0 0 1.6rem;line-height:1.65}
+.g-search{position:relative;max-width:620px}
+.g-search svg{position:absolute;left:1rem;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.g-search input{width:100%;font:inherit;font-size:.98rem;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line2);border-radius:14px;padding:.9rem 1rem .9rem 2.9rem;outline:none;
+  box-shadow:var(--shadow);transition:border-color .15s,box-shadow .15s}
+.g-search input:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--ring)}
+.g-hits{position:absolute;left:0;right:0;top:calc(100% + .5rem);background:var(--panel);border:1px solid var(--line2);
+  border-radius:14px;box-shadow:0 24px 60px -24px rgba(0,0,0,.35);overflow:hidden;display:none;z-index:50;max-height:320px;overflow-y:auto}
+.g-hits.open{display:block}
+.g-hit{display:flex;flex-direction:column;gap:.1rem;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);
+  padding:.7rem .95rem;cursor:pointer;font:inherit}
+.g-hit:last-child{border-bottom:0}
+.g-hit:hover,.g-hit.sel{background:var(--panel2)}
+.g-hit b{color:var(--ink);font-size:.92rem}
+.g-hit span{color:var(--muted);font-size:.8rem}
+.g-hero .quick{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.1rem}
+.quick a{font-size:.82rem;font-weight:600;color:var(--ink2);text-decoration:none;border:1px solid var(--line2);
+  background:var(--panel);border-radius:99px;padding:.4rem .9rem;transition:border-color .15s,color .15s,transform .12s}
+.quick a:hover{border-color:var(--acc);color:var(--ink);transform:translateY(-1px)}
+/* layout */
+.g-layout{max-width:1160px;margin:0 auto;padding:.4rem 1.25rem 5rem;display:grid;grid-template-columns:264px minmax(0,1fr);gap:2.2rem;align-items:start}
+.g-side{position:sticky;top:76px;max-height:calc(100dvh - 96px);overflow-y:auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:18px;padding:1rem .9rem;box-shadow:var(--shadow);scrollbar-width:thin}
+.g-side h4{margin:.2rem .2rem .6rem;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.g-side h4:not(:first-child){margin-top:1.1rem}
+.g-side nav{display:flex;flex-direction:column;gap:2px}
+.g-side a.nav{display:flex;align-items:center;gap:.6rem;text-decoration:none;color:var(--ink2);
+  font-size:.87rem;font-weight:500;padding:.52rem .65rem;border-radius:10px;line-height:1.3;transition:background .12s,color .12s}
+.g-side a.nav .n{font-family:"Space Grotesk";font-weight:700;color:var(--acc);font-size:.7rem;flex:0 0 1.5em;opacity:.85}
+.g-side a.nav:hover{background:var(--panel2);color:var(--ink)}
+.g-side a.nav.on{background:var(--acc-soft);color:var(--ink);font-weight:600}
+.g-side a.nav.hide{display:none}
+.vbadge{margin-left:auto;font-size:.62rem;font-weight:700;letter-spacing:.08em;color:var(--acc2);
+  background:color-mix(in srgb, var(--acc2) 14%, transparent);border:1px solid color-mix(in srgb, var(--acc2) 40%, transparent);
+  border-radius:99px;padding:.1rem .5rem;text-transform:uppercase}
+.g-count{font-size:.78rem;color:var(--muted);margin:.6rem .2rem 0}
+/* articles */
+.g-main{min-width:0}
+.g-art{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:1.9rem 2.1rem;
+  margin-bottom:1.25rem;box-shadow:var(--shadow);scroll-margin-top:84px;opacity:0;transform:translateY(14px);
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+.g-art.in{opacity:1;transform:none}
+.art-head{display:flex;align-items:flex-start;gap:.8rem;margin-bottom:.4rem;flex-wrap:wrap}
+.art-num{font-family:"Space Grotesk";font-weight:700;color:var(--acc);font-size:.8rem;letter-spacing:.1em;
+  border:1px solid var(--line2);background:var(--acc-soft);border-radius:9px;padding:.25rem .6rem;margin-top:.15rem}
+.g-art h2{font-size:1.45rem;margin:0;letter-spacing:-.015em;flex:1;min-width:200px}
+.g-art h3{font-size:1.06rem;margin:1.5rem 0 .45rem;letter-spacing:-.01em}
+.g-art p{margin:.55rem 0;color:var(--ink2);font-size:.94rem;line-height:1.7}
+.g-art p strong,.g-art li strong{color:var(--ink)}
+.g-art ul,.g-art ol{margin:.5rem 0 .9rem;padding-left:1.3rem;color:var(--ink2);font-size:.93rem;line-height:1.65}
+.g-art li{margin:.3rem 0}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.84em;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:.1em .45em;white-space:nowrap;color:var(--ink)}
+a.xref{color:var(--acc);font-weight:600;text-decoration:none}
+a.xref:hover{text-decoration:underline}
+a.url{font-family:ui-monospace,Menlo,monospace;font-size:.86em;background:var(--panel2);border:1px solid var(--line);
+  border-radius:6px;padding:.1em .45em;color:var(--acc);text-decoration:none;overflow-wrap:anywhere}
+a.url:hover{border-color:var(--acc)}
+.g-callout{border:1px solid var(--line2);border-left:3px solid var(--acc);border-radius:12px;
+  background:var(--panel2);padding:.75rem 1rem;margin:.9rem 0;font-size:.9rem;color:var(--ink2);line-height:1.6}
+.g-callout.warn{border-left-color:var(--err)}
+.g-callout.ok{border-left-color:var(--ok)}
+.g-callout b{color:var(--ink)}
+/* interactive walkthrough steps */
+.g-walk{margin:1rem 0;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.g-walk-head{display:flex;align-items:center;gap:.7rem;padding:.75rem 1.1rem;background:var(--panel2);border-bottom:1px solid var(--line)}
+.g-walk-head b{font-size:.86rem;color:var(--ink)}
+.g-walk-head .bar{flex:1;height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+.g-walk-head .bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .35s ease}
+.g-walk-head .pct{font-size:.76rem;color:var(--muted);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right}
+.g-steps{list-style:none;margin:0;padding:.4rem;display:flex;flex-direction:column;gap:.25rem;counter-reset:gs}
+.g-steps li{counter-increment:gs;display:flex;gap:.85rem;align-items:flex-start;padding:.7rem .8rem;border-radius:12px;
+  cursor:pointer;transition:background .15s;font-size:.92rem;color:var(--ink2);line-height:1.6}
+.g-steps li:hover{background:var(--panel2)}
+.g-steps li::before{content:counter(gs);flex:0 0 1.8em;width:1.8em;height:1.8em;border-radius:50%;
+  background:var(--acc-soft);color:var(--acc);font-weight:700;font-size:.8rem;font-family:"Space Grotesk";
+  display:inline-flex;align-items:center;justify-content:center;margin-top:.05rem;transition:background .2s,color .2s,transform .2s}
+.g-steps li.done{color:var(--muted)}
+.g-steps li.done .st{text-decoration:line-through;text-decoration-color:var(--acc2);text-decoration-thickness:2px}
+.g-steps li.done::before{content:"✓";background:var(--ok);color:#fff;transform:scale(1.05)}
+.g-steps li .st b{color:var(--ink)}
+.g-steps li.done .st b{color:var(--muted)}
+/* demo mocks */
+.g-demo{border:1px solid var(--line);border-radius:16px;overflow:hidden;margin:1rem 0;background:var(--panel2)}
+.g-demo-bar{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border-bottom:1px solid var(--line);background:var(--panel)}
+.g-demo-bar .d{display:inline-flex;gap:.35rem}
+.g-demo-bar .d i{width:.65rem;height:.65rem;border-radius:50%;background:var(--line2)}
+.g-demo-bar span.cap{font-size:.75rem;color:var(--muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-left:.3rem}
+.g-demo-body{padding:1.2rem;display:flex;flex-direction:column;gap:.7rem;align-items:center}
+.mock-key{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:1rem 1.2rem;width:min(420px,100%);box-shadow:var(--shadow)}
+.mock-key .row{display:flex;gap:.6rem}
+.mock-key input{flex:1;font:inherit;font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:.55rem .8rem}
+.mock-key button{font:inherit;font-weight:700;font-size:.85rem;color:#fff;background:linear-gradient(120deg,var(--acc),var(--acc2));
+  border:0;border-radius:9px;padding:.55rem 1.1rem;cursor:pointer}
+.mock-phone{background:#101016;color:#f2f0fa;border-radius:22px;padding:1.1rem 1.2rem;width:min(300px,100%);text-align:center;box-shadow:var(--shadow)}
+.mock-phone .who{font-family:"Space Grotesk";font-weight:700;font-size:1.05rem}
+.mock-phone .num{font-family:ui-monospace,monospace;font-size:.78rem;color:#b9b3d6;margin:.15rem 0 .7rem}
+.mock-phone .timer{font-family:ui-monospace,monospace;font-size:1.5rem;font-weight:700;letter-spacing:.06em;color:#8b5cf6}
+.mock-phone .stat{font-size:.78rem;color:#b9b3d6}
+.mock-phone .pad{display:flex;justify-content:center;gap:.7rem;margin-top:.8rem}
+.mock-phone .pad i{width:2.6rem;height:2.6rem;border-radius:50%;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:1rem}
+.mock-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem;width:100%}
+.mock-stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem}
+.mock-stat .k{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.mock-stat .v{font-family:"Space Grotesk";font-weight:700;font-size:1.5rem;margin-top:.15rem}
+.mock-stat .v em{font-style:normal;color:var(--acc2);font-size:.85rem}
+.mock-ivr{background:var(--panel);border:1px solid var(--line2);border-radius:12px;width:min(380px,100%);overflow:hidden}
+.mock-ivr .h{padding:.7rem 1rem;background:var(--acc-soft);font-weight:700;font-size:.86rem;color:var(--ink)}
+.mock-ivr .o{display:flex;gap:.8rem;align-items:center;padding:.65rem 1rem;border-top:1px solid var(--line);font-size:.88rem;color:var(--ink2)}
+.mock-ivr .o b{font-family:"Space Grotesk";color:var(--acc);background:var(--acc-soft);border-radius:8px;width:1.7em;height:1.7em;
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 1.7em}
+.mock-line{background:var(--panel);border:1px solid var(--line2);border-radius:12px;width:min(380px,100%);padding:1rem 1.2rem;text-align:center}
+.mock-line .num{font-family:ui-monospace,monospace;font-size:1.25rem;font-weight:700;color:var(--acc);letter-spacing:.04em}
+.mock-line .sub{font-size:.8rem;color:var(--muted);margin-top:.25rem}
+.mock-bubble{display:flex;align-items:center;gap:.7rem;background:var(--panel);border:1px solid var(--line2);
+  border-radius:99px;padding:.5rem 1.1rem .5rem .55rem;box-shadow:var(--shadow);font-weight:600;font-size:.88rem;color:var(--ink)}
+.mock-bubble .dot{width:2.1rem;height:2.1rem;border-radius:50%;background:linear-gradient(120deg,var(--acc),var(--acc2));
+  display:inline-flex;align-items:center;justify-content:center;color:#fff;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.demo-note{font-size:.78rem;color:var(--muted);text-align:center}
+/* code blocks */
+.g-code{position:relative;margin:1rem 0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#14141c}
+.g-code pre{margin:0;padding:1.05rem 1.2rem;overflow-x:auto;color:#e8e4f7;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:.82rem;line-height:1.65}
+.g-code .cmt{color:#8f8aa8}
+.g-code .tag{color:#8b5cf6}.g-code .attr{color:#22d3ee}.g-code .str{color:#a7f3d0}
+.g-copy{position:absolute;top:.6rem;right:.6rem;font:inherit;font-size:.74rem;font-weight:600;color:#cfc9e2;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:.32rem .7rem;cursor:pointer}
+.g-copy:hover{background:rgba(255,255,255,.16);color:#fff}
+/* faq */
+.faq dt{font-weight:700;color:var(--ink);font-size:.95rem;margin:1.1rem 0 .3rem}
+.faq dd{margin:0 0 .5rem;color:var(--ink2);font-size:.92rem;line-height:1.65}
+.faq details{border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;margin:.5rem 0;background:var(--panel2)}
+.faq details summary{cursor:pointer;font-weight:700;color:var(--ink);font-size:.94rem;list-style:none}
+.faq details summary::-webkit-details-marker{display:none}
+.faq details summary::before{content:"+";color:var(--acc);font-weight:700;margin-right:.6rem;font-family:"Space Grotesk"}
+.faq details[open] summary::before{content:"–"}
+.faq details p{margin:.6rem 0 0}
+/* feedback */
+.g-feedback{margin-top:1.6rem;padding-top:1.2rem;border-top:1px dashed var(--line2);display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+.g-feedback .q{font-size:.88rem;font-weight:600;color:var(--ink2)}
+.g-feedback button{font:inherit;font-size:.84rem;font-weight:600;border:1px solid var(--line2);background:var(--panel);
+  color:var(--ink2);border-radius:99px;padding:.42rem 1.05rem;cursor:pointer;transition:all .15s}
+.g-feedback button:hover{border-color:var(--acc);color:var(--ink);transform:translateY(-1px)}
+.g-feedback button:active{transform:scale(.95)}
+.g-feedback button.chosen-yes{background:var(--ok);border-color:var(--ok);color:#fff}
+.g-feedback button.chosen-no{background:var(--acc);border-color:var(--acc);color:#fff}
+.g-feedback .thanks{font-size:.85rem;color:var(--ok);font-weight:600;display:none}
+.g-feedback.answered .thanks{display:inline}
+/* table */
+.g-art table{width:100%;border-collapse:collapse;font-size:.87rem;margin:.7rem 0}
+.g-art th,.g-art td{text-align:left;padding:.5rem .65rem;border-bottom:1px solid var(--line);color:var(--ink2)}
+.g-art th{color:var(--muted);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.07em}
+kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.76rem;background:var(--panel2);
+  border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:.1rem .5rem;color:var(--ink)}
+.g-foot{max-width:1160px;margin:0 auto;padding:0 1.25rem 3rem;color:var(--muted);font-size:.84rem}
+.g-foot a{color:var(--acc);font-weight:600;text-decoration:none}
+@media(max-width:900px){
+  .g-layout{grid-template-columns:1fr}
+  .g-side{position:static;max-height:none;order:2}
+  .g-art{padding:1.35rem 1.25rem}
+}
+@media(prefers-reduced-motion:reduce){
+  .g-art{transition:none;opacity:1;transform:none}
+  *{animation-duration:.01ms!important}
 }
 </style>
 </head>
 <body>
+<div class="g-wrap">
 
-<header class="docs-top">
+<header class="g-top">
   <a class="back-link" href="index.html" aria-label="Back to Symbiote Calling">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
     Back to Symbiote Calling
   </a>
-  <span class="brand">Symbiote <em>Calling</em> · User Guide</span>
+  <span class="brand">Symbiote <em>Calling</em> · Guide center</span>
   <span style="margin-left:auto"></span>
-  <button class="icon-btn sm" id="docsTheme" type="button" aria-label="Toggle theme">
+  <button class="icon-btn" id="gTheme" type="button" aria-label="Toggle dark / light mode">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
   </button>
 </header>
 
-<section class="docs-hero">
-  <span class="kicker">v7 · Complete user guide</span>
-  <h1>Everything <em>Symbiote Calling</em> can do, start to finish.</h1>
-  <p class="lede">101 AI calling agents you talk to with your voice, right from the browser. This guide walks you through the key, the first call, custom agents, memory, and hosting — in short sections you can skim.</p>
+<section class="g-hero">
+  <span class="kicker">v8 · Guide center</span>
+  <h1>Learn <em>Symbiote Calling</em> in minutes, not hours.</h1>
+  <p class="lede">101 AI calling agents you talk to with your voice, right from the browser. Follow the step-by-step walkthroughs below — tap each step as you finish it and the guide tracks your progress.</p>
+  <div class="g-search">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="gSearch" type="search" autocomplete="off" aria-label="Search the guides">
+    <div class="g-hits" id="gHits" role="listbox" aria-label="Search results"></div>
+  </div>
+  <div class="quick">
+    <a href="#getting-started">First call in 4 steps</a>
+    <a href="#business-line">Business line</a>
+    <a href="#embed-widget">Embed widget</a>
+    <a href="#faq">FAQ</a>
+  </div>
 </section>
 
-<div class="docs-layout">
-  <nav class="toc" aria-label="Guide sections">
-    <h4>On this page</h4>
-    <ol id="tocList">
-      <li><a href="#getting-started"><span class="n">01</span>Getting started</a></li>
-      <li><a href="#making-calls"><span class="n">02</span>Making calls</a></li>
-      <li><a href="#agents"><span class="n">03</span>Agents</a></li>
-      <li><a href="#custom-agents"><span class="n">04</span>Custom agents</a></li>
-      <li><a href="#during-after-calls"><span class="n">05</span>During &amp; after calls</a></li>
-      <li><a href="#memory-persistence"><span class="n">06</span>Memory &amp; persistence</a></li>
-      <li><a href="#dashboard-stats"><span class="n">07</span>Dashboard &amp; stats</a></li>
-      <li><a href="#deploying-railway"><span class="n">08</span>Deploying on Railway</a></li>
-      <li><a href="#troubleshooting"><span class="n">09</span>Troubleshooting</a></li>
-      <li><a href="#faq"><span class="n">10</span>FAQ</a></li>
-    </ol>
-  </nav>
+<div class="g-layout">
+  <aside class="g-side" aria-label="Guide navigation">
+    <h4>Guides</h4>
+    <nav id="gNav">
+      <a class="nav" href="#getting-started"><span class="n">01</span>Getting started</a>
+      <a class="nav" href="#agents"><span class="n">02</span>Agents</a>
+      <a class="nav" href="#custom-agents"><span class="n">03</span>Custom agents</a>
+      <a class="nav" href="#business-line"><span class="n">04</span>Business line <span class="vbadge">v8</span></a>
+      <a class="nav" href="#making-calls"><span class="n">05</span>Calls</a>
+      <a class="nav" href="#embed-widget"><span class="n">06</span>Embed widget <span class="vbadge">v8</span></a>
+      <a class="nav" href="#dashboard-stats"><span class="n">07</span>Dashboard</a>
+      <a class="nav" href="#api"><span class="n">08</span>API <span class="vbadge">v8</span></a>
+      <a class="nav" href="#faq"><span class="n">09</span>FAQ</a>
+    </nav>
+    <h4>Reference</h4>
+    <nav id="gNavRef">
+      <a class="nav" href="#during-after-calls">During &amp; after calls</a>
+      <a class="nav" href="#memory-persistence">Memory &amp; persistence</a>
+      <a class="nav" href="#deploying-railway">Deploying on Railway</a>
+      <a class="nav" href="#troubleshooting">Troubleshooting</a>
+    </nav>
+    <p class="g-count" id="gCount"></p>
+  </aside>
 
-  <main class="docs-main">
+  <main class="g-main" id="gMain">
 
-    <!-- ============================ 01 ============================ -->
-    <section class="dsec" id="getting-started">
-      <div class="dsec-head"><span class="dsec-num">01</span><h2>Getting started</h2></div>
-      <p>Symbiote Calling runs voice calls through Google's Gemini Live — you bring your own API key, and the app does the rest.</p>
-      <ol class="steps">
-        <li>Open the app and head to <strong>Settings</strong>.</li>
-        <li>Paste <strong>one Gemini API key</strong> — it powers every agent. Need one? Grab a free key at <a class="url" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</li>
-        <li>Your key is your login: the app stays behind the key screen until a key is entered, and everything you save belongs to that key. <a class="xref" href="#memory-persistence">Memory &amp; persistence</a> explains exactly how that works.</li>
-        <li>Go to <strong>Agents</strong> and tap <strong>Call</strong> on anyone.</li>
-      </ol>
-      <div class="callout ok"><b>Your key is never stored.</b> It lives in server memory for the call only — never written to disk, never logged, never put in a URL. The Settings page shows only a status line like "Key set for this page session".</div>
+    <!-- ============================ 01 GETTING STARTED ============================ -->
+    <article class="g-art" id="getting-started" data-title="Getting started" data-tags="key login api first call setup theme">
+      <div class="art-head"><span class="art-num">01</span><h2>Getting started</h2></div>
+      <p>Symbiote Calling runs voice calls through Google's Gemini Live — you bring your own API key, and the app does the rest. Your key is your login: the whole app stays behind the key screen until a key is entered.</p>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: your first call</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Open Settings</b> — use the Settings tab in the top bar.</span></li>
+          <li><span class="st"><b>Enter one Gemini API key.</b> It powers every agent. Need one? Get a free key at <a class="url" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</span></li>
+          <li><span class="st"><b>Open the Agents tab</b> and pick anyone — try SymAgent, the featured card at the top.</span></li>
+          <li><span class="st"><b>Tap Call</b> and start talking. Say <span class="mono">khuda hafiz</span> or <span class="mono">cut the call</span> when you're done.</span></li>
+        </ol>
+      </div>
+      <div class="g-demo">
+        <div class="g-demo-bar"><span class="d"><i></i><i></i><i></i></span><span class="cap">Key login · design mock</span></div>
+        <div class="g-demo-body">
+          <div class="mock-key">
+            <div class="row"><input value="AIza…••••••••••••" readonly aria-hidden="true" tabindex="-1"><button type="button" tabindex="-1">Unlock</button></div>
+          </div>
+          <p class="demo-note">Design mock — the real key screen may differ.</p>
+        </div>
+      </div>
+      <div class="g-callout ok"><b>Your key is never stored.</b> It lives in server memory for the call only — never written to disk, never logged, never put in a URL. The Settings page shows only a status line, never the key itself.</div>
       <h3>Key profiles</h3>
-      <p>If you juggle more than one key (say, a personal key and a demo key), you can save named <strong>key profiles</strong> and switch between them from the key screen — each profile keeps its own calls, memories, and custom agents.</p>
+      <p>Juggling more than one key — say a personal key and a demo key? Save named <strong>key profiles</strong> and switch from the key screen. Each profile keeps its own calls, memories, and custom agents, because everything is tied to the key's hash, never the key itself.</p>
       <h3>Appearance</h3>
       <ul>
-        <li><strong>Theme</strong> — light by default, one-tap dark mode via the sun/moon button in the top bar (remembered).</li>
-        <li><strong>Accent color</strong> — pick an accent color in Settings and the whole app follows it.</li>
+        <li><strong>Theme</strong> — light by default; one-tap dark mode via the sun/moon button in the top bar (remembered across visits).</li>
+        <li><strong>Accent color</strong> — pick an accent in Settings and the whole app follows it. Press <kbd class="keycap">Ctrl</kbd>+<kbd class="keycap">K</kbd> anywhere and choose <em>Toggle theme</em> for a faster flip.</li>
       </ul>
-    </section>
+      <div class="g-feedback" data-article="getting-started"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 02 ============================ -->
-    <section class="dsec" id="making-calls">
-      <div class="dsec-head"><span class="dsec-num">02</span><h2>Making calls</h2></div>
-      <h3>The agent directory</h3>
-      <p>The <strong>Agents</strong> tab lists all built-in agents with their portrait, niche, and number. Use the <strong>search/filter</strong> box to find one by name or niche (try "visa" or "tutor"), or tap an agent card to open its <strong>profile sheet</strong> with details. Tap <strong>Call</strong> to start talking.</p>
-      <h3>The dialer</h3>
-      <p>Know the number? Open the <strong>Dialer</strong> and punch it in — <strong>smart dialer</strong> shows matching agents above the pad as you type, with exact matches highlighted. The dialer also has a <strong>recents</strong> tab so you can redial people you called before in one tap. Dialing an unknown number simply tells you it doesn't exist — nothing breaks.</p>
-      <h3>The call screen</h3>
-      <p>A Samsung-style phone slides up: <span class="mono">Dialing…</span> → <span class="mono">Connecting…</span> → a live timer in <span class="mono">mm:ss</span>. While the call is live you have:</p>
-      <ul>
-        <li><strong>Mute</strong> — silence your mic.</li>
-        <li><strong>Keypad</strong> — a DTMF pad with real touch tones (handy for menus; tones never reach the model).</li>
-        <li><strong>Chat</strong> — type and the agent answers by <em>voice</em>; has a close button.</li>
-        <li><strong>Hang up</strong> — ends the call.</li>
-        <li><strong>Floating bubble</strong> — shrink the phone into a floating bubble that stays on screen so you can browse agents while you talk.</li>
-      </ul>
-      <p>You can also end calls hands-free: say <strong>"cut the call"</strong>, <strong>"khuda hafiz"</strong>, or just goodbye — the agent says farewell and hangs up itself.</p>
-      <div class="callout"><b>No mic? No problem.</b> If the microphone is blocked or missing, the call continues in chat mode — you type, the agent still answers by voice.</div>
-    </section>
-
-    <!-- ============================ 03 ============================ -->
-    <section class="dsec" id="agents">
-      <div class="dsec-head"><span class="dsec-num">03</span><h2>Agents</h2></div>
-      <h3>The 100 built-ins</h3>
-      <p>One hundred niche calling agents — a restaurant host, visa guide, interview coach, pharmacy assistant, chess coach, and 95 more — each with a fictional number from <span class="mono">+1 (555) 010-0001</span> to <span class="mono">+1 (555) 010-0100</span> that works only inside this app. Every agent has a gender-matched voice and its own AI portrait.</p>
-      <div class="callout"><b>Hard limits on sensitive roles.</b> Some agents carry baked-in guardrails: the salon booker never diagnoses, the legal assistant is not a lawyer, the pharmacy assistant gives general info only and refers to professionals. These are demos, not professional services.</div>
+    <!-- ============================ 02 AGENTS ============================ -->
+    <article class="g-art" id="agents" data-title="Agents" data-tags="101 built-in symagent transfer link chips directory voice niche">
+      <div class="art-head"><span class="art-num">02</span><h2>Agents</h2></div>
+      <p><strong>One hundred niche calling agents</strong> — a restaurant host, visa guide, interview coach, pharmacy assistant, chess coach, and 95 more — each with a fictional number from <span class="mono">+1 (555) 010-0001</span> to <span class="mono">+1 (555) 010-0100</span> that works only inside this app. Every agent has a gender-matched voice and its own AI portrait.</p>
+      <div class="g-callout"><b>Hard limits on sensitive roles.</b> Some agents carry baked-in guardrails: the salon booker never diagnoses, the legal assistant is not a lawyer, the pharmacy assistant gives general info only and refers to professionals. These are demos, not professional services.</div>
       <h3>SymAgent — the 101st agent</h3>
       <p>Sitting in the featured hero card above the directory is <strong>SymAgent</strong> (<span class="mono">+1 (555) 010-0101</span>) — the official AI representative of Symbiote Systems, the agency behind this platform. It knows the company's services (AI calling/voice agents, websites, AI chatbots, automation on Make/n8n), the portfolio, the socials, and the contact details — and it knows all 100 agents by name, niche, and number, because that directory is generated straight from the app's own code so it can never drift.</p>
-      <p>SymAgent won't talk pricing and won't book appointments — it informs, impresses, and captures leads. If a caller is interested, it collects name, email, phone, and the service they want, and saves it as a note for the team to follow up.</p>
+      <p>SymAgent won't talk pricing — it informs, impresses, and captures leads. If a caller is interested, it collects name, email, phone, and the service they want, and saves it as a note for the team to follow up.</p>
+      <h3>Call transfer (SymAgent only)</h3>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: transfer to a specialist</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Call SymAgent</b> from the featured hero card.</span></li>
+          <li><span class="st"><b>Ask about a specialist service</b> — e.g. "I need someone who can help with my visa paperwork."</span></li>
+          <li><span class="st"><b>Accept the offer to connect</b> — SymAgent transfers you mid-call into a call with that specialist. Works with built-in and custom agents alike.</span></li>
+        </ol>
+      </div>
       <h3>Clickable link chips</h3>
       <p>Ask SymAgent for socials, portfolio, or contact details and it drops <strong>clickable link chips</strong> into the in-call chat — Instagram, Threads, X, LinkedIn, Pinterest, Gumroad, the portfolio sites, client work (Aquifer Reach LLC), email, and WhatsApp. The URLs are server-side constants, so the model can never invent or inject its own links.</p>
-      <h3>Call transfer (SymAgent only)</h3>
-      <p>Talking to SymAgent about a specialist service? It offers to connect you. Say yes and it <strong>transfers you mid-call</strong> into a call with that specialist agent. Transfer works with built-in agents and your custom agents alike.</p>
-    </section>
+      <div class="g-feedback" data-article="agents"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 04 ============================ -->
-    <section class="dsec" id="custom-agents">
-      <div class="dsec-head"><span class="dsec-num">04</span><h2>Custom agents</h2></div>
-      <p>The <strong>Custom Agents</strong> page is where you build your own. Your custom agents live side-by-side with the built-ins — they're part of Symbiote Calling too, SymAgent knows about them, and it can transfer callers to them.</p>
-      <h3>The builder</h3>
-      <ul>
-        <li><strong>Name</strong> — required.</li>
-        <li><strong>Number</strong> — required; any random number works, it just has to be unique.</li>
-        <li><strong>Role</strong> — required; pick a niche or write your own.</li>
-        <li><strong>Tone</strong> — pick from a few presets (e.g. professional, friendly) to shape how the agent speaks.</li>
-        <li><strong>Voice</strong> — the <strong>voice picker</strong> lets you audition and assign a voice.</li>
-        <li><strong>Prompt</strong> — optional custom instructions; start from a <strong>prompt template</strong> if you like.</li>
-      </ul>
-      <p>There is <strong>no limit</strong> on how many you create. Custom agents are saved under your API-key profile, so the same key always reloads the same agents — and a different key never sees them.</p>
+    <!-- ============================ 03 CUSTOM AGENTS ============================ -->
+    <article class="g-art" id="custom-agents" data-title="Custom agents" data-tags="builder create clone tone voice prompt role number">
+      <div class="art-head"><span class="art-num">03</span><h2>Custom agents</h2></div>
+      <p>The <strong>Custom Agents</strong> page is where you build your own. Your custom agents live side-by-side with the built-ins — they're part of Symbiote Calling too, SymAgent knows about them, and it can transfer callers to them. <strong>Unlimited</strong> agents per key.</p>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: build your first agent</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Name</b> — required. Make it memorable; callers hear it first.</span></li>
+          <li><span class="st"><b>Number</b> — required. Any random number works, it just has to be unique.</span></li>
+          <li><span class="st"><b>Role</b> — required. Pick a niche or write your own custom role.</span></li>
+          <li><span class="st"><b>Tone</b> — pick a preset (professional, friendly, …) to shape how the agent speaks.</span></li>
+          <li><span class="st"><b>Voice</b> — the voice picker lets you audition and assign a voice.</span></li>
+          <li><span class="st"><b>Prompt</b> — optional custom instructions; start from a prompt template if you like.</span></li>
+          <li><span class="st"><b>Review &amp; Create</b> — your agent appears in the Agents list immediately, no reload needed.</span></li>
+        </ol>
+      </div>
       <h3>Clone an agent</h3>
-      <p>Found a built-in you like? <strong>Clone</strong> it to get a custom copy with the same voice and role, then tweak the name, prompt, or tone to make it yours.</p>
-    </section>
+      <p>Found a built-in you like? <strong>Clone</strong> it to get a custom copy with the same voice and role, then tweak the name, prompt, or tone to make it yours. Custom agents themselves are never cloneable — only the 101 built-ins.</p>
+      <div class="g-callout"><b>Saved per key.</b> Custom agents are stored under your API-key profile — the same key always reloads the same agents, and a different key never sees them.</div>
+      <div class="g-feedback" data-article="custom-agents"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 05 ============================ -->
-    <section class="dsec" id="during-after-calls">
-      <div class="dsec-head"><span class="dsec-num">05</span><h2>During &amp; after calls</h2></div>
-      <h3>While you're talking</h3>
-      <ul>
-        <li><strong>In-call notes</strong> — jot down notes during the call; they're saved with that call's record.</li>
-        <li><strong>Recording</strong> — every call is recorded on your device (a red dot shows it's rolling). Recordings never leave your device.</li>
-        <li><strong>Chat &amp; keypad</strong> — covered in <a class="xref" href="#making-calls">Making calls</a>.</li>
-      </ul>
-      <h3>After you hang up</h3>
-      <p>Open the call on the <strong>Memory</strong> page — its detail view holds everything the call produced:</p>
-      <ul>
-        <li><strong>Auto summary</strong> — a short AI summary (a few lines + the outcome) is generated after each call, free and in the background, never blocking anything.</li>
-        <li><strong>Recording download</strong> — grab the device recording as an audio file. Recordings never leave your device.</li>
-        <li><strong>Transcript download</strong> — save the full transcript as a text file.</li>
-      </ul>
-      <p>The dashboard shows your <strong>recent calls</strong> at a glance, and the dialer has a <strong>recents</strong> tab to redial in one tap.</p>
-    </section>
+    <!-- ============================ 04 BUSINESS LINE ============================ -->
+    <!-- UNVERIFIED-LIVE: v8 feature #26 (per-key virtual business line). Documented
+         from scope: each API key gets its own fictional front-door number; widget
+         calls land on it; missed-call log + reminders. Needs a real key to verify. -->
+    <article class="g-art" id="business-line" data-title="Business line" data-tags="virtual number front-door missed calls reminders ivr teams routing v8">
+      <div class="art-head"><span class="art-num">04</span><h2>Business line <span class="vbadge">v8</span></h2></div>
+      <p>Your <strong>virtual business line</strong> is your own fictional front door. Every API key gets <strong>its own front-door number</strong> — calls from your website widget land on it first, then get routed to the right agent. Like the built-in agent numbers, it's fictional and works only inside the app.</p>
+      <div class="g-demo">
+        <div class="g-demo-bar"><span class="d"><i></i><i></i><i></i></span><span class="cap">Your line · design mock</span></div>
+        <div class="g-demo-body">
+          <div class="mock-line">
+            <div class="num">+1 (555) 010-0101</div>
+            <div class="sub">Your key's front-door number · design mock</div>
+          </div>
+          <p class="demo-note">Design mock — your actual line number is shown in Settings → Business line.</p>
+        </div>
+      </div>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: set up your line</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Enter your key</b> and open <b>Settings → Business line</b> to see your front-door number.</span></li>
+          <li><span class="st"><b>Point your widget at it</b> — the <a class="xref" href="#embed-widget">embed widget</a> dials this number automatically.</span></li>
+          <li><span class="st"><b>Choose how calls route</b> — straight to an agent, through the <b>IVR menu</b>, or via a smart-routing <b>team</b> (see below).</span></li>
+          <li><span class="st"><b>Check the missed-call log</b> — anyone who called while you were away is listed, with a reminder to follow up.</span></li>
+        </ol>
+      </div>
+      <h3>IVR menu</h3>
+      <p>The <strong>IVR call menu</strong> greets widget callers with numbered options — "press 1 for sales, 2 for support" — and routes each choice to the right agent or team. Configure the options per line.</p>
+      <div class="g-demo">
+        <div class="g-demo-bar"><span class="d"><i></i><i></i><i></i></span><span class="cap">IVR menu · design mock</span></div>
+        <div class="g-demo-body">
+          <div class="mock-ivr">
+            <div class="h">Thanks for calling — how can we help?</div>
+            <div class="o"><b>1</b><span>Sales — talk to a product specialist</span></div>
+            <div class="o"><b>2</b><span>Support — reach the help desk</span></div>
+            <div class="o"><b>3</b><span>Leave a message</span></div>
+          </div>
+          <p class="demo-note">Design mock — configure your own options per line.</p>
+        </div>
+      </div>
+      <h3>Agent teams &amp; smart routing</h3>
+      <p>Group agents into <strong>teams</strong> (e.g. a Sales team and a Support team) and let <strong>smart routing</strong> send each caller to the best-fit agent — by IVR choice, topic, or your own rules. SymAgent can still transfer callers into any team member mid-call.</p>
+      <div class="g-feedback" data-article="business-line"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 06 ============================ -->
-    <section class="dsec" id="memory-persistence">
-      <div class="dsec-head"><span class="dsec-num">06</span><h2>Memory &amp; persistence</h2></div>
-      <h3>How memory works</h3>
-      <p>Agents remember you. Every call saves notes, appointments, and the full transcript behind the scenes — plus an <strong>AI-written summary</strong>. The <strong>Memory</strong> page shows that summary per call; open any entry to read it, or download the transcript or the device recording from the same view.</p>
-      <p>When you call the same agent again, its recent memories are injected into its prompt — so it picks up where you left off.</p>
-      <h3>Your data belongs to your key</h3>
-      <p>Memories and history are tied to your API key <em>by hash</em> — the key itself is never stored, only a fingerprint of it. Change the key and everything resets cleanly, so keys never cross-contaminate.</p>
-      <h3>Keeping data across redeploys (Railway)</h3>
-      <p>On Railway the filesystem is wiped on every redeploy, so point the app at a persistent volume:</p>
-      <ol class="steps">
-        <li>Railway dashboard → your service → <strong>Volumes</strong> → <strong>Add volume</strong>, mount path <span class="mono">/data</span>.</li>
-        <li>Same service → <strong>Variables</strong> → add <span class="mono">DATA_DIR=/data</span>.</li>
-        <li>Redeploy. History and memories now survive updates.</li>
-      </ol>
-      <div class="callout warn"><b>Tip:</b> before any big change, go to <strong>Memory → Download backup (JSON)</strong> for a local copy. <strong>Restore</strong> puts it back. Until you do the volume step, a redeploy wipes everything — that will look like a bug if you forget.</div>
-      <p>The app also runs <strong>auto-cleanup</strong> in the background so old data doesn't pile up forever, and an <strong>audit log</strong> records important data events for your own peace of mind.</p>
-    </section>
+    <!-- ============================ 05 CALLS ============================ -->
+    <article class="g-art" id="making-calls" data-title="Calls" data-tags="dialer call screen phone mute keypad chat hangup greeting voice">
+      <div class="art-head"><span class="art-num">05</span><h2>Calls</h2></div>
+      <h3>The agent directory</h3>
+      <p>The <strong>Agents</strong> tab lists all built-in agents with portrait, niche, and number. Use <strong>search/filter</strong> to find one by name or niche (try "visa" or "tutor"), or tap a card to open its <strong>profile sheet</strong>. Tap <strong>Call</strong> to start talking.</p>
+      <h3>The dialer</h3>
+      <p>Know the number? Open the <strong>Dialer</strong> and punch it in — the <strong>smart dialer</strong> shows matching agents above the pad as you type, with exact matches highlighted. A <strong>recents</strong> tab redials anyone in one tap. Dialing an unknown number simply tells you it doesn't exist.</p>
+      <h3>The call screen</h3>
+      <div class="g-demo">
+        <div class="g-demo-bar"><span class="d"><i></i><i></i><i></i></span><span class="cap">Call screen · design mock</span></div>
+        <div class="g-demo-body">
+          <div class="mock-phone">
+            <div class="who">SymAgent</div>
+            <div class="num">+1 (555) 010-0101</div>
+            <div class="timer">02:41</div>
+            <div class="stat">live · connecting… → live timer mm:ss</div>
+            <div class="pad"><i>🔇</i><i>⌨</i><i>💬</i><i style="background:#b91c1c">📞</i></div>
+          </div>
+          <p class="demo-note">Design mock — mute, keypad, chat, hang up.</p>
+        </div>
+      </div>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: master the call screen</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Mute</b> — silence your mic mid-call.</span></li>
+          <li><span class="st"><b>Keypad</b> — a DTMF pad with real touch tones for menus (tones never reach the model).</span></li>
+          <li><span class="st"><b>Chat</b> — type and the agent answers by <em>voice</em>; close button included.</span></li>
+          <li><span class="st"><b>Hang up</b> — ends the call. Or say <span class="mono">cut the call</span> / <span class="mono">khuda hafiz</span> and the agent farewells, then hangs up itself.</span></li>
+        </ol>
+      </div>
+      <div class="g-callout"><b>No mic? No problem.</b> If the microphone is blocked or missing, the call continues in chat mode — you type, the agent still answers by voice.</div>
+      <p><strong>Greeting:</strong> the app shows "Connecting…" until the agent's first greeting audio lands (cap ~7s), so you perceive an instant greeting instead of silence. See <a class="xref" href="#troubleshooting">Troubleshooting</a> if an agent stays silent.</p>
+      <div class="g-feedback" data-article="making-calls"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 07 ============================ -->
-    <section class="dsec" id="dashboard-stats">
-      <div class="dsec-head"><span class="dsec-num">07</span><h2>Dashboard &amp; stats</h2></div>
-      <p>The <strong>dashboard</strong> is your home screen after login: live stat cards, your top 5 most-called agents, and recent calls.</p>
+    <!-- ============================ 06 EMBED WIDGET ============================ -->
+    <!-- UNVERIFIED-LIVE: v8 feature #3 (website embed widget). Snippet shape is
+         schematic; the final copy-paste snippet ships in Settings > Business line. -->
+    <article class="g-art" id="embed-widget" data-title="Embed widget" data-tags="website embed snippet html widget v8">
+      <div class="art-head"><span class="art-num">06</span><h2>Embed widget <span class="vbadge">v8</span></h2></div>
+      <p>Put a <strong>call widget</strong> on any website and your visitors can talk to your agents without leaving the page. Widget calls land on your <a class="xref" href="#business-line">business line</a> — your key's own fictional front-door number — and route exactly like any other call.</p>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: embed the widget</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Open Settings → Business line</b> and copy your widget snippet (it already contains your line number).</span></li>
+          <li><span class="st"><b>Paste the snippet</b> before <span class="mono">&lt;/body&gt;</span> on your site.</span></li>
+          <li><span class="st"><b>Visitors tap the bubble</b> to start a voice call — routed through your IVR or team, like any other call.</span></li>
+          <li><span class="st"><b>Review in Dashboard</b> — widget calls appear in analytics and the missed-call log like everything else.</span></li>
+        </ol>
+      </div>
+      <h3>The snippet</h3>
+      <div class="g-code">
+        <button class="g-copy" type="button" data-copy>Copy</button>
+<pre><code><span class="cmt">&lt;!-- UNVERIFIED-LIVE: final snippet ships in Settings &gt; Business line --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="str">"https://YOUR-APP-URL/embed.js"</span>
+        <span class="attr">data-business-line</span>=<span class="str">"YOUR-LINE-NUMBER"</span> <span class="tag">defer&gt;&lt;/script&gt;</span></code></pre>
+      </div>
+      <div class="g-demo">
+        <div class="g-demo-bar"><span class="d"><i></i><i></i><i></i></span><span class="cap">Widget on your site · design mock</span></div>
+        <div class="g-demo-body">
+          <div class="mock-bubble"><span class="dot">◈</span> Talk to us</div>
+          <p class="demo-note">Design mock — a floating bubble visitors tap to call.</p>
+        </div>
+      </div>
+      <div class="g-feedback" data-article="embed-widget"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
+
+    <!-- ============================ 07 DASHBOARD ============================ -->
+    <!-- UNVERIFIED-LIVE: v8 features #4 (call analytics) and #11 (sentiment + lead
+         scoring). Documented from scope; needs a real key to verify. -->
+    <article class="g-art" id="dashboard-stats" data-title="Dashboard" data-tags="stats analytics sentiment lead scoring top agents recent calls v8">
+      <div class="art-head"><span class="art-num">07</span><h2>Dashboard <span class="vbadge">v8</span></h2></div>
+      <p>The <strong>dashboard</strong> is your home screen after login: live stat cards, your top 5 most-called agents, and recent calls — plus v8's expanded <strong>call analytics</strong>.</p>
+      <div class="g-demo">
+        <div class="g-demo-bar"><span class="d"><i></i><i></i><i></i></span><span class="cap">Analytics · design mock</span></div>
+        <div class="g-demo-body">
+          <div class="mock-cards">
+            <div class="mock-stat"><div class="k">Total calls</div><div class="v">128</div></div>
+            <div class="mock-stat"><div class="k">Minutes talked</div><div class="v">342</div></div>
+            <div class="mock-stat"><div class="k">Leads captured</div><div class="v">17 <em>+4 hot</em></div></div>
+            <div class="mock-stat"><div class="k">Avg. sentiment</div><div class="v">😊 <em>positive</em></div></div>
+          </div>
+          <p class="demo-note">Design mock — real numbers come from your key's history.</p>
+        </div>
+      </div>
       <table>
         <tr><th>Stat</th><th>What it counts</th></tr>
         <tr><td>Total calls</td><td>Every call you made</td></tr>
         <tr><td>Minutes talked</td><td>Sum of call durations</td></tr>
         <tr><td>Leads captured</td><td>Notes saved by SymAgent (lead details)</td></tr>
         <tr><td>Top agents</td><td>Your 5 most-called agents, with counts</td></tr>
+        <tr><td>Call analytics <span class="vbadge">v8</span></td><td>Deeper breakdowns: per-agent stats, call patterns, outcomes</td></tr>
       </table>
-      <p><strong>Per-agent stats</strong> break it down further: calls, minutes, and notes per agent. <strong>Usage metering</strong> tracks your calling activity, and <strong>quota timer alerts</strong> warn you before a long session eats into your API quota.</p>
-    </section>
+      <h3>Sentiment &amp; lead scoring</h3>
+      <p>After each call, the conversation's <strong>sentiment</strong> is scored (positive / neutral / negative), and captured leads get a <strong>lead score</strong> — so the hottest prospects sort to the top of your follow-up list. <strong>Usage metering</strong> tracks your calling activity, and <strong>quota timer alerts</strong> warn you before a long session eats into your API quota.</p>
+      <div class="g-feedback" data-article="dashboard-stats"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 08 ============================ -->
-    <section class="dsec" id="deploying-railway">
-      <div class="dsec-head"><span class="dsec-num">08</span><h2>Deploying on Railway</h2></div>
-      <ol class="steps">
-        <li>Push the repo to GitHub (<span class="mono">npm test</span> first — the suite runs with zero dependencies).</li>
-        <li>Create a Railway project from that repo — it deploys the Node server automatically.</li>
-        <li><strong>Auto-deploy is on:</strong> every push to the connected branch redeploys, no manual step needed.</li>
-        <li>Set env vars in the service's <strong>Variables</strong>:
-          <ul>
-            <li><span class="mono">DATA_DIR=/data</span> — with a volume mounted at <span class="mono">/data</span> (see the <a class="xref" href="#memory-persistence">Memory &amp; persistence</a> section for the full walkthrough).</li>
-            <li><span class="mono">GEMINI_API_KEY</span> — optional. If set, the server has a fallback key; in practice each user enters their own key in the app, so this can stay empty.</li>
-          </ul>
-        </li>
-      </ol>
-      <div class="callout"><b>Why not serverless?</b> A voice call needs one permanent open line held the whole time (browser → server → Google, via WebSocket). Serverless functions wake, answer once, and sleep — they can't hold that line. That's why the app runs as one always-on service.</div>
-    </section>
+    <!-- ============================ 08 API ============================ -->
+    <article class="g-art" id="api" data-title="API" data-tags="endpoints rest json health agents stats custom key-hash developer v8">
+      <div class="art-head"><span class="art-num">08</span><h2>API <span class="vbadge">v8</span></h2></div>
+      <p>A small read-mostly JSON API powers the app — handy for dashboards, the embed widget, and your own integrations. All calls are same-origin; key-scoped routes identify the caller by the key's hash.</p>
+      <table>
+        <tr><th>Method</th><th>Endpoint</th><th>Returns</th></tr>
+        <tr><td><span class="mono">GET</span></td><td><span class="mono">/api/health</span></td><td>Service status + agent count</td></tr>
+        <tr><td><span class="mono">GET</span></td><td><span class="mono">/api/agents</span></td><td>All 101 built-in agents (id, name, niche, number, voice)</td></tr>
+        <tr><td><span class="mono">GET</span></td><td><span class="mono">/api/stats</span></td><td>Dashboard stats for the current key</td></tr>
+        <tr><td><span class="mono">GET</span></td><td><span class="mono">/api/history</span></td><td>Call history for the current key</td></tr>
+        <tr><td><span class="mono">GET</span></td><td><span class="mono">/api/memories</span></td><td>Saved memories / call summaries</td></tr>
+        <tr><td><span class="mono">GET</span></td><td><span class="mono">/api/v7/custom-agents</span></td><td>Your custom agents (send <span class="mono">x-key-hash</span> header or <span class="mono">?keyHash=</span>)</td></tr>
+      </table>
+      <div class="g-callout"><b>Key scoping.</b> History, memories, and custom agents are tied to the API key's hash — the key itself is never sent. Send the hash in the <span class="mono">x-key-hash</span> header (or <span class="mono">?keyHash=</span>) exactly as the app does; a different hash sees a different dataset.</div>
+      <div class="g-callout warn"><b>Voice calls are not REST.</b> Calls ride a persistent WebSocket (<span class="mono">/live</span>) from browser → server → Google. The table above covers data endpoints only.</div>
+      <div class="g-feedback" data-article="api"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
-    <!-- ============================ 09 ============================ -->
-    <section class="dsec" id="troubleshooting">
-      <div class="dsec-head"><span class="dsec-num">09</span><h2>Troubleshooting</h2></div>
+    <!-- ============================ 09 FAQ ============================ -->
+    <article class="g-art" id="faq" data-title="FAQ" data-tags="questions real numbers key record custom data pricing">
+      <div class="art-head"><span class="art-num">09</span><h2>FAQ</h2></div>
+      <dl class="faq">
+        <details open>
+          <summary>Is this a real phone network? Can I call real numbers?</summary>
+          <p>No. The <span class="mono">+1 (555)</span> numbers are fictional and work only inside the app — including your <a class="xref" href="#business-line">business line</a>. This is a demo, not a phone company, emergency service, or medical/legal/financial provider.</p>
+        </details>
+        <details>
+          <summary>Where does my API key go?</summary>
+          <p>Into server memory for the call only. Never stored, never logged, never in a URL. Data is keyed to your key by hash, so only you see your history.</p>
+        </details>
+        <details>
+          <summary>Can I use it without a microphone?</summary>
+          <p>Yes — chat mode. Type your messages; the agent still answers by voice.</p>
+        </details>
+        <details>
+          <summary>Are my calls recorded?</summary>
+          <p>On your device, for you. Recordings and transcripts never leave your device — they only ever land in your own memory page and backups, which are yours.</p>
+        </details>
+        <details>
+          <summary>Can I make my own agents?</summary>
+          <p>Yes — the Custom Agents page (name, number, role, tone, voice, prompt), unlimited, saved per key. SymAgent even knows about them and can transfer callers to them.</p>
+        </details>
+        <details>
+          <summary>Does my data survive redeploys?</summary>
+          <p>Yes, if you did the <span class="mono">DATA_DIR=/data</span> volume step (see <a class="xref" href="#memory-persistence">Memory &amp; persistence</a>). Otherwise redeploys wipe it — keep a JSON backup from the Memory page.</p>
+        </details>
+        <details>
+          <summary>Why does SymAgent ask for my details instead of answering?</summary>
+          <p>That's its job: it's the company rep. It informs and captures leads (name, email, phone, service) for the team to follow up.</p>
+        </details>
+        <details>
+          <summary>Why won't it discuss pricing?</summary>
+          <p>By design — SymAgent doesn't talk pricing. It connects interested callers with the team instead.</p>
+        </details>
+      </dl>
+      <div class="g-feedback" data-article="faq"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
+
+    <!-- ============================ REF: DURING & AFTER CALLS ============================ -->
+    <article class="g-art" id="during-after-calls" data-title="During & after calls" data-tags="recording notes summary transcript download appointment booking">
+      <div class="art-head"><span class="art-num">R1</span><h2>During &amp; after calls</h2></div>
+      <h3>While you're talking</h3>
+      <ul>
+        <li><strong>In-call notes</strong> — jot down notes during the call; they're saved with that call's record.</li>
+        <li><strong>Recording</strong> — calls are recorded on your device. Recordings never leave your device.</li>
+        <li><strong>Appointment booking</strong> <span class="vbadge">v8</span> — agents can book appointments mid-call; confirmed slots are saved to the call's record and memory.</li>
+      </ul>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: after you hang up</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Open the Memory page</b> and find the call you just made.</span></li>
+          <li><span class="st"><b>Read the auto summary</b> — a short AI summary (a few lines + the outcome) is generated free in the background, never blocking anything.</span></li>
+          <li><span class="st"><b>Download the recording</b> as an audio file — it never left your device.</span></li>
+          <li><span class="st"><b>Download the transcript</b> as a text file for your records.</span></li>
+        </ol>
+      </div>
+      <p>The dashboard shows your <strong>recent calls</strong> at a glance, and the dialer has a <strong>recents</strong> tab to redial in one tap.</p>
+      <div class="g-feedback" data-article="during-after-calls"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
+
+    <!-- ============================ REF: MEMORY & PERSISTENCE ============================ -->
+    <article class="g-art" id="memory-persistence" data-title="Memory & persistence" data-tags="memory key hash backup restore data_dir railway volume">
+      <div class="art-head"><span class="art-num">R2</span><h2>Memory &amp; persistence</h2></div>
+      <h3>How memory works</h3>
+      <p>Agents remember you. Every call saves notes, appointments, and the full transcript behind the scenes — plus an <strong>AI-written summary</strong>. The <strong>Memory</strong> page shows that summary per call; open any entry to read it, or download the transcript or the device recording from the same view.</p>
+      <p>When you call the same agent again, its recent memories are injected into its prompt — so it picks up where you left off.</p>
+      <h3>Your data belongs to your key</h3>
+      <p>Memories and history are tied to your API key <em>by hash</em> — the key itself is never stored, only a fingerprint of it. Change the key and everything resets cleanly, so keys never cross-contaminate.</p>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: keep data across redeploys (Railway)</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Railway dashboard → your service → Volumes → Add volume</b>, mount path <span class="mono">/data</span>.</span></li>
+          <li><span class="st"><b>Same service → Variables → add</b> <span class="mono">DATA_DIR=/data</span>.</span></li>
+          <li><span class="st"><b>Redeploy.</b> History and memories now survive updates.</span></li>
+        </ol>
+      </div>
+      <div class="g-callout warn"><b>Tip:</b> before any big change, go to <strong>Memory → Download backup (JSON)</strong> for a local copy. <strong>Restore</strong> puts it back. Until you do the volume step, a redeploy wipes everything — that will look like a bug if you forget.</div>
+      <p>The app also runs <strong>auto-cleanup</strong> in the background so old data doesn't pile up forever, and an <strong>audit log</strong> records important data events for your own peace of mind.</p>
+      <div class="g-feedback" data-article="memory-persistence"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
+
+    <!-- ============================ REF: DEPLOYING ============================ -->
+    <article class="g-art" id="deploying-railway" data-title="Deploying on Railway" data-tags="deploy railway hosting variables server volume">
+      <div class="art-head"><span class="art-num">R3</span><h2>Deploying on Railway</h2></div>
+      <div class="g-walk" data-walk>
+        <div class="g-walk-head"><b>Walkthrough: deploy</b><div class="bar"><i></i></div><span class="pct">0%</span></div>
+        <ol class="g-steps">
+          <li><span class="st"><b>Push the repo to GitHub</b> (<span class="mono">npm test</span> first — the suite runs with zero dependencies).</span></li>
+          <li><span class="st"><b>Create a Railway project from that repo</b> — it deploys the Node server automatically.</span></li>
+          <li><span class="st"><b>Auto-deploy is on:</b> every push to the connected branch redeploys, no manual step needed.</span></li>
+          <li><span class="st"><b>Set env vars</b> in the service's Variables:
+            <ul>
+              <li><span class="mono">DATA_DIR=/data</span> — with a volume mounted at <span class="mono">/data</span> (see <a class="xref" href="#memory-persistence">Memory &amp; persistence</a>).</li>
+              <li><span class="mono">GEMINI_API_KEY</span> — optional server fallback; in practice each user enters their own key, so this can stay empty.</li>
+            </ul></span></li>
+        </ol>
+      </div>
+      <div class="g-callout"><b>Why not serverless?</b> A voice call needs one permanent open line held the whole time (browser → server → Google, via WebSocket). Serverless functions wake, answer once, and sleep — they can't hold that line. That's why the app runs as one always-on service.</div>
+      <div class="g-feedback" data-article="deploying-railway"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
+
+    <!-- ============================ REF: TROUBLESHOOTING ============================ -->
+    <article class="g-art" id="troubleshooting" data-title="Troubleshooting" data-tags="greeting silent mic key quota audio search recording errors">
+      <div class="art-head"><span class="art-num">R4</span><h2>Troubleshooting</h2></div>
       <h3>No greeting yet — the agent stays silent?</h3>
-      <p>Honest answer: <strong>greeting behavior is under active improvement.</strong> The app sends a greeting trigger on connect, nudges the model once if it stays silent, and holds your mic closed until the greeting audio lands so you don't talk over it. If the agent still doesn't greet first, say something or type in chat — it will respond. If it happens on every call with every agent, let the team know: it's the bug we're chasing hardest.</p>
+      <p>The app sends a greeting trigger on connect, nudges the model once if it stays silent, and holds your mic closed until the greeting audio lands so you don't talk over it. The call screen shows "Connecting…" until that audio arrives. If the agent still doesn't greet first, say something or type in chat — it will respond. If it happens on every call with every agent, report it: it's the behavior we tune hardest.</p>
       <h3>Mic blocked or missing</h3>
       <p>Check Settings → mic default, and your browser's site permissions. Either way, calls fall back to chat mode automatically — you type, the agent answers by voice.</p>
       <h3>Key issues</h3>
       <ul>
         <li><strong>"No key entered"</strong> — the app can't start a call without a key; paste one in Settings.</li>
         <li><strong>"Key changed"</strong> — memories and history are key-scoped, so switching keys shows a fresh slate. Your old data is untouched, tied to the old key.</li>
-        <li><strong>Quota errors</strong> — the key's Gemini quota is exhausted; wait for it to reset or use another key profile.</li>
+        <li><strong>Quota errors</strong> — the key's Gemini quota is exhausted; wait for it to reset or switch key profile.</li>
       </ul>
       <h3>Other hiccups</h3>
       <ul>
@@ -292,57 +629,169 @@ kbd.keycap{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;background:
         <li><strong>Recording missing/empty</strong> — the mic was likely denied; allow it and call again.</li>
         <li><strong>Double greeting after transfer</strong> — report it; transfers should hand you over with a single greeting.</li>
       </ul>
-    </section>
-
-    <!-- ============================ 10 ============================ -->
-    <section class="dsec" id="faq">
-      <div class="dsec-head"><span class="dsec-num">10</span><h2>FAQ</h2></div>
-      <dl class="faq">
-        <dt>Is this a real phone network? Can I call real numbers?</dt>
-        <dd>No. The <span class="mono">+1 (555)</span> numbers are fictional and work only inside the app. This is a demo, not a phone company, emergency service, or medical/legal/financial provider.</dd>
-        <dt>Where does my API key go?</dt>
-        <dd>Into server memory for the call only. Never stored, never logged, never in a URL. Data is keyed to your key by hash, so only you see your history.</dd>
-        <dt>Can I use it without a microphone?</dt>
-        <dd>Yes — chat mode. Type your messages; the agent still answers by voice.</dd>
-        <dt>Are my calls recorded?</dt>
-        <dd>On your device, for you. Recordings and transcripts never leave your device — they only ever land in your own memory page and backups, which are yours.</dd>
-        <dt>Can I make my own agents?</dt>
-        <dd>Yes — the Custom Agents page (name, number, role, tone, voice, prompt), unlimited, saved per key. SymAgent even knows about them and can transfer callers to them.</dd>
-        <dt>Does my data survive redeploys?</dt>
-        <dd>Yes, if you did the <span class="mono">DATA_DIR=/data</span> volume step. Otherwise redeploys wipe it — keep a JSON backup from the Memory page.</dd>
-        <dt>Why does SymAgent ask for my details instead of answering a question?</dt>
-        <dd>That's its job: it's the company rep. It informs and captures leads (name, email, phone, service) for the team to follow up.</dd>
-        <dt>Why won't it discuss pricing?</dt>
-        <dd>By design — SymAgent doesn't talk pricing or book appointments. It connects interested callers with the team instead.</dd>
-      </dl>
-    </section>
+      <div class="g-feedback" data-article="troubleshooting"><span class="q">Was this helpful?</span><button type="button" data-vote="yes">Yes</button><button type="button" data-vote="no">No</button><span class="thanks">Thanks — noted.</span></div>
+    </article>
 
   </main>
 </div>
 
-<footer class="note">Symbiote Calling · <a href="index.html" style="color:var(--acc)">← Back to the app</a></footer>
+<footer class="g-foot">
+  Symbiote Calling · Guide center v8 · <a href="index.html">← Back to the app</a>
+</footer>
+</div>
 
 <script>
-/* Match the app's theme choice (symbiote-theme in localStorage). */
+'use strict';
+/* Guide center — client-side behavior: theme, search, scroll-spy, walkthrough
+ * progress, per-article feedback, copy buttons, reveal animations.
+ * UNVERIFIED-LIVE: v8 features (#26 business line, #3 embed widget, #4 analytics,
+ * #11 sentiment/lead scoring, #5 appointment booking, #13 IVR, #15 teams) are
+ * documented from scope and need a real key to verify end-to-end. */
 (function () {
-  var btn = document.getElementById('docsTheme');
-  function apply(t) { document.documentElement.setAttribute('data-theme', t); }
-  try { apply(localStorage.getItem('symbiote-theme') || 'light'); } catch (e) {}
-  btn.addEventListener('click', function () {
-    var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    apply(t);
-    try { localStorage.setItem('symbiote-theme', t); } catch (e) {}
-  });
-  /* Highlight TOC entry for the section in view. */
-  var links = Array.prototype.slice.call(document.querySelectorAll('#tocList a'));
-  var secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
-  function onScroll() {
-    var y = window.scrollY + 140, cur = secs[0];
-    secs.forEach(function (s) { if (s.offsetTop <= y) cur = s; });
-    links.forEach(function (a) { a.classList.toggle('on', a.getAttribute('href') === '#' + cur.id); });
+  var $ = function (id) { return document.getElementById(id); };
+  function lsGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+  /* ---------- theme (v8: honors the app's Light/Dark/System choice) ---------- */
+  function effectiveTheme(t) {
+    if (t === 'system' && window.matchMedia) return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return (t === 'dark') ? 'dark' : 'light';
   }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+  function applyTheme(t) { document.documentElement.setAttribute('data-theme', effectiveTheme(t)); lsSet('symbiote-theme', t); }
+  applyTheme(lsGet('symbiote-theme', 'light'));
+  $('gTheme').addEventListener('click', function () {
+    applyTheme((document.documentElement.getAttribute('data-theme') || 'light') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ---------- search index ---------- */
+  var arts = Array.prototype.slice.call(document.querySelectorAll('.g-art')).map(function (a) {
+    return { id: a.id, title: a.getAttribute('data-title') || a.id, tags: a.getAttribute('data-tags') || '' };
+  });
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.g-side a.nav'));
+  var hitsBox = $('gHits'), searchInp = $('gSearch'), countEl = $('gCount');
+
+  function matches(q, art) {
+    q = q.toLowerCase();
+    return art.title.toLowerCase().indexOf(q) !== -1 || art.tags.toLowerCase().indexOf(q) !== -1;
+  }
+  function renderHits(q) {
+    var found = arts.filter(function (a) { return matches(q, a); });
+    navLinks.forEach(function (l) {
+      var id = l.getAttribute('href').slice(1);
+      var art = arts.filter(function (a) { return a.id === id; })[0];
+      l.classList.toggle('hide', !(art && matches(q, art)));
+    });
+    countEl.textContent = found.length + ' of ' + arts.length + ' guides';
+    hitsBox.innerHTML = '';
+    if (!q) { hitsBox.classList.remove('open'); return; }
+    found.slice(0, 8).forEach(function (a, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'g-hit' + (i === 0 ? ' sel' : ''); b.setAttribute('role', 'option');
+      b.innerHTML = '<b></b><span></span>';
+      b.querySelector('b').textContent = a.title;
+      b.querySelector('span').textContent = a.tags.split(' ').slice(0, 5).join(' · ');
+      b.addEventListener('click', function () { goTo(a.id); });
+      hitsBox.appendChild(b);
+    });
+    hitsBox.classList.add('open');
+  }
+  function goTo(id) {
+    hitsBox.classList.remove('open');
+    searchInp.value = '';
+    navLinks.forEach(function (l) { l.classList.remove('hide'); });
+    countEl.textContent = '';
+    var el = document.getElementById(id);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  }
+  searchInp.addEventListener('input', function () { renderHits(searchInp.value.trim()); });
+  searchInp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      var first = hitsBox.querySelector('.g-hit');
+      if (first) { e.preventDefault(); first.click(); }
+    } else if (e.key === 'Escape') { searchInp.value = ''; renderHits(''); searchInp.blur(); }
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.g-search')) hitsBox.classList.remove('open');
+  });
+
+  /* ---------- scroll spy ---------- */
+  var spy = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting) {
+        navLinks.forEach(function (l) { l.classList.toggle('on', l.getAttribute('href') === '#' + en.target.id); });
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  arts.forEach(function (a) { spy.observe(document.getElementById(a.id)); });
+
+  /* ---------- reveal on scroll ---------- */
+  var rev = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); rev.unobserve(en.target); } });
+  }, { threshold: 0.06 });
+  document.querySelectorAll('.g-art').forEach(function (a) { rev.observe(a); });
+
+  /* ---------- interactive walkthroughs ---------- */
+  var progress = lsGet('symbiote-guide-progress', {});
+  function paintWalk(walk) {
+    var items = Array.prototype.slice.call(walk.querySelectorAll('.g-steps li'));
+    var done = items.filter(function (li) { return li.classList.contains('done'); }).length;
+    var pct = items.length ? Math.round(done / items.length * 100) : 0;
+    walk.querySelector('.bar i').style.width = pct + '%';
+    walk.querySelector('.pct').textContent = pct + '%';
+  }
+  document.querySelectorAll('[data-walk]').forEach(function (walk) {
+    var id = walk.closest('.g-art').id;
+    var items = Array.prototype.slice.call(walk.querySelectorAll('.g-steps li'));
+    items.forEach(function (li, i) {
+      if (progress[id + ':' + i]) li.classList.add('done');
+      li.addEventListener('click', function () {
+        li.classList.toggle('done');
+        progress[id + ':' + i] = li.classList.contains('done') ? 1 : 0;
+        lsSet('symbiote-guide-progress', progress);
+        paintWalk(walk);
+      });
+    });
+    paintWalk(walk);
+  });
+
+  /* ---------- feedback ---------- */
+  var votes = lsGet('symbiote-guide-feedback', {});
+  document.querySelectorAll('.g-feedback').forEach(function (box) {
+    var id = box.getAttribute('data-article');
+    function paint() {
+      var v = votes[id];
+      box.querySelectorAll('button').forEach(function (b) {
+        b.classList.toggle('chosen-yes', v === 'yes' && b.getAttribute('data-vote') === 'yes');
+        b.classList.toggle('chosen-no', v === 'no' && b.getAttribute('data-vote') === 'no');
+      });
+      box.classList.toggle('answered', !!v);
+    }
+    box.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        votes[id] = b.getAttribute('data-vote');
+        lsSet('symbiote-guide-feedback', votes);
+        paint();
+      });
+    });
+    paint();
+  });
+
+  /* ---------- copy buttons ---------- */
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var code = btn.parentElement.querySelector('code');
+      var text = code ? code.innerText : '';
+      function done() { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 1400); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, done);
+      } else {
+        var ta = document.createElement('textarea'); ta.value = text;
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta); done();
+      }
+    });
+  });
 })();
 </script>
 </body>

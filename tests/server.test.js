@@ -128,9 +128,9 @@ module.exports = {
     });
   },
 
-  'server startup log carries v7.5': function () {
+  'server startup log carries v8.0': function () {
     var src = fs.readFileSync(serverJs, 'utf8');
-    assert.ok(/Symbiote Calling v7\.5/.test(src), 'startup log says v7.5');
+    assert.ok(/Symbiote Calling v8\.0/.test(src), 'startup log says v8.0');
     assert.ok(/process\.env\.DATA_DIR/.test(src), 'DATA_DIR wired');
   }
 };
