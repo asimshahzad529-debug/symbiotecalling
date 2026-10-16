@@ -231,6 +231,7 @@ Bridge.prototype.handleSetup = async function (msg) {
     keyHash: this.keyHash,
     customStore: this.customStore,
     inbound: inboundOpts,
+    resumeNote: (typeof msg.resumeNote === 'string' && msg.resumeNote.trim()) ? msg.resumeNote.slice(0, 2000) : null,
     systemInstruction: prompt.buildAgentInstruction(agent, recallText, customDir, teamCfg),
     onEvent: function (ev) { self.onEvent(ev); }
   });

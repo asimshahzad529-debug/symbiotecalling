@@ -48,9 +48,9 @@ module.exports = {
     assert.ok(nums.size > 45, 'expected spread, got ' + nums.size + ' distinct of 50');
   },
 
-  'business-line numbers never collide with the 101 built-in agent numbers': function () {
+  'business-line numbers never collide with the 102 built-in agent numbers': function () {
     var builtinNums = new Set(agents.AGENTS.map(function (a) { return a.number; }));
-    assert.ok(builtinNums.size >= 101, 'expected 101+ built-ins');
+    assert.ok(builtinNums.size >= 102, 'expected 102+ built-ins');
     for (var i = 0; i < 200; i++) {
       var kh = require('crypto').createHash('sha256').update('probe' + i).digest('hex');
       var n = bl.numberForKeyHash(kh);

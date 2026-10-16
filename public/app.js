@@ -694,6 +694,9 @@
   var ws = null, callAgent = null, connectedAt = 0, timerInt = null;
   var callId = null, callToken = 0, artifactsDone = false;
   var callTranscript = [];
+  var callTarget = null;   // background resume: the live call's dial target ({agentId}|{number})
+  var bgHidden = false;    // background resume: tab went hidden mid-call
+  var wakeLock = null;     // background resume: screen wake lock held during calls
   var recorder = null, recDest = null;
   var muted = false, micStream = null, audioCtx = null, workletNode = null;
   var playCtx = null, nextPlayTime = 0, activeSources = [];
@@ -847,6 +850,62 @@
     waveSet('idle', 0);
   }
 
+  /* ---------- background call survival (mobile) ----------
+   * Wail's flow: on a call with Ustaad -> minimize Chrome -> open the Play
+   * Store -> install an app -> come back. The call must NOT die ("no mistake").
+   * - Screen wake lock: the screen never sleeps mid-call.
+   * - visibilitychange: when the tab is hidden we do nothing (no teardown).
+   *   On return: if the socket survived, just revive the mic/audio contexts;
+   *   if the socket died, silently reconnect with a resume note so the agent
+   *   continues from the transcript instead of greeting again. */
+  async function acquireWakeLock() {
+    try {
+      if ('wakeLock' in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', function () { wakeLock = null; });
+      }
+    } catch (e) { wakeLock = null; }
+  }
+  function releaseWakeLock() {
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+  async function ensureMicAlive() {
+    var track = micStream && micStream.getAudioTracks()[0];
+    if (!track || track.readyState === 'ended') {
+      stopMic();
+      if (settings.mic) await startMic();
+    }
+    try { if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume(); } catch (e) {}
+    try { if (playCtx && playCtx.state === 'suspended') await playCtx.resume(); } catch (e) {}
+  }
+  function resumeCallAfterBackground() {
+    if (!callTarget) return;
+    var recent = callTranscript.slice(-8).map(function (t) {
+      return (t.who === 'user' ? 'Caller' : 'Agent') + ': ' + String(t.text || '').slice(0, 300);
+    }).join('\n');
+    var note = '[System note: the caller briefly switched to another app and is back on the call. ' +
+      'Continue naturally from where you left off. Do NOT greet again. Do NOT mention this note. ' +
+      'Recent conversation:\n' + recent + ']';
+    try { if (ws) ws.close(); } catch (e) {}
+    ws = null;
+    callToken++; // suppress the dead socket's onclose -> endCallUI
+    setCallState('Dobara connect ho raha hai…');
+    openLiveSocket(callTarget, note);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (ws && callTarget) bgHidden = true;
+      return;
+    }
+    if (!bgHidden) return;
+    bgHidden = false;
+    if (!ws || !callTarget) return; // call already ended while away
+    acquireWakeLock(); // the OS releases the lock while hidden
+    if (ws.readyState === 1) ensureMicAlive(); // socket survived: just revive the mic
+    else resumeCallAfterBackground();          // socket died: silent reconnect with context
+  });
+
   async function startMic() {
     try {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
@@ -926,13 +985,19 @@
     } catch (e) {}
 
     if (settings.mic) await startMic();
+    acquireWakeLock(); // background survival: the screen never sleeps mid-call
+    callTarget = target; // background survival: resume target if the tab is backgrounded
+    openLiveSocket(target, null);
+  }
 
+  function openLiveSocket(target, resumeNote) {
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(proto + '//' + location.host + '/live');
     ws.onopen = function () {
       try { if (window.CallX) CallX.meter.netState(navigator.onLine, ws.readyState); } catch (e) {}
       var setup = { type: 'setup', apiKey: activeApiKey(), model: settings.model };
       if (target.agentId) setup.agentId = target.agentId; else setup.number = target.number;
+      if (resumeNote) setup.resumeNote = resumeNote; // background resume: no greeting, restore context
       ws.send(JSON.stringify(setup));
     };
     ws.onmessage = onServer;
@@ -965,6 +1030,15 @@
       case 'setup_complete':
         connectedAt = Date.now();
         sfx('connect');
+        if (msg.resumed) {
+          // Background resume: the call UI is already live — just continue.
+          // (Exactly-once revealCallUI is a safe no-op here; the timer kept running.)
+          revealCallUI();
+          ungateMic();
+          if (greetFallbackT) { clearTimeout(greetFallbackT); greetFallbackT = null; }
+          startRecording();
+          break;
+        }
         // v7.5 greeting mask: do NOT reveal the live UI here. Stay on
         // "Connecting…" until the first greeting output reveals it via the
         // mask (first greeting audio -> user perceives instant greeting).
@@ -1053,6 +1127,8 @@
   function endCallUI(text) {
     sfx('hangup');
     finishCallArtifacts();
+    releaseWakeLock(); // background survival: release the screen lock
+    callTarget = null; bgHidden = false; // background survival: no resume after a real hangup
     waveStop(); waveSet('idle', 0); // v8 #46/#49: freeze the waveform
     if (timerInt) { clearInterval(timerInt); timerInt = null; }
     if (greetMask) { try { greetMask.reset(); } catch (e) {} greetMask = null; }
@@ -1221,7 +1297,7 @@
   window.addEventListener('beforeunload', function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hangup' })); });
 
   var f = document.createElement('footer'); f.className = 'note';
-  f.textContent = 'Symbiote Calling v7.5 · 101 agents + your custom agents · local demo — fictional numbers, not a real phone network.';
+  f.textContent = 'Symbiote Calling v7.5 · 102 agents + your custom agents · local demo — fictional numbers, not a real phone network.';
   document.getElementById('main').appendChild(f);
 
   /* ---------- v7 boot: key login gates everything ---------- */

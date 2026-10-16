@@ -14,7 +14,7 @@ function loadAvatar() {
 }
 
 module.exports = {
-  '101 unique deterministic well-formed avatars': function () {
+  '102 unique deterministic well-formed avatars': function () {
     var avatarSVG = loadAvatar();
     var seen = new Set();
     agents.AGENTS.forEach(function (a) {
@@ -24,7 +24,7 @@ module.exports = {
       seen.add(s1);
       assert.ok(s1.indexOf('<svg') === 0 && s1.indexOf('</svg>') !== -1, 'well-formed for ' + a.id);
     });
-    assert.strictEqual(seen.size, 101);
+    assert.strictEqual(seen.size, 102);
   },
   'avatar honors agent color and id': function () {
     var avatarSVG = loadAvatar();

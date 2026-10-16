@@ -8,9 +8,9 @@ var FEMININE_VOICES = ['Kore', 'Zephyr', 'Puck', 'Aoede', 'Leda'];
 var MASCULINE_VOICES = ['Charon', 'Fenrir', 'Orus', 'Enceladus'];
 
 module.exports = {
-  'exactly 101 agents (100 niche + SymAgent)': function () {
-    assert.strictEqual(agents.AGENTS.length, 101);
-    assert.strictEqual(agents.list().length, 101);
+  'exactly 102 agents (100 niche + SymAgent + Ustaad)': function () {
+    assert.strictEqual(agents.AGENTS.length, 102);
+    assert.strictEqual(agents.list().length, 102);
   },
   'ids, numbers unique; numbers fictional 555 range; gender set': function () {
     var ids = new Set(), nums = new Set();
@@ -20,7 +20,9 @@ module.exports = {
       assert.ok(!ids.has(a.id), 'dup id ' + a.id); ids.add(a.id);
       var d = agents.digitsOf(a.number);
       assert.ok(!nums.has(d), 'dup number ' + a.number); nums.add(d);
-      assert.ok(d.startsWith('1555010'), 'fictional 555 range: ' + a.number);
+      // Ustaad uses short number 12345 per owner request; the rest are fictional 555 range.
+      if (a.id === 'ustaad') assert.strictEqual(d, '12345', 'ustaad short number');
+      else assert.ok(d.startsWith('1555010'), 'fictional 555 range: ' + a.number);
     });
   },
   'voice matches gender (feminine voices for female agents, masculine for male)': function () {
@@ -45,19 +47,36 @@ module.exports = {
     assert.ok(/sales/i.test(hugo.niche), 'hugo is the sales agent');
     assert.ok(/roleplay|objection/i.test(hugo.prompt), 'sales practice prompt');
     var names = agents.AGENTS.map(function (a) { return a.name.toLowerCase(); });
-    assert.strictEqual(new Set(names).size, 101, 'all names unique');
+    assert.strictEqual(new Set(names).size, 102, 'all names unique');
   },
-  'numbers span 0001-0101 in the fictional range': function () {
+  'numbers: 12345 short (Ustaad) + 0001-0101 in the fictional range': function () {
     var nums = agents.AGENTS.map(function (a) { return agents.digitsOf(a.number); }).sort();
-    assert.strictEqual(nums[0], '15550100001');
-    assert.strictEqual(nums[99], '15550100100');
-    assert.strictEqual(nums[100], '15550100101');
+    assert.strictEqual(nums[0], '12345');
+    assert.strictEqual(nums[1], '15550100001');
+    assert.strictEqual(nums[100], '15550100100');
+    assert.strictEqual(nums[101], '15550100101');
   },
   'getById resolves; unknown id null': function () {
     assert.strictEqual(agents.getById('ava').name, 'Jacob');
     assert.strictEqual(agents.getById('max').name, 'Aurora');
     assert.strictEqual(agents.getById('hugo').name, 'Liam');
+    assert.strictEqual(agents.getById('ustaad').name, 'Ustaad');
     assert.strictEqual(agents.getById('nope'), null);
+  },
+  'ustaad: dials on 12345, knows Sheraz, teaches in Hinglish': function () {
+    assert.strictEqual(agents.getByNumber('12345').id, 'ustaad');
+    var u = agents.getById('ustaad');
+    assert.strictEqual(u.number, '12345');
+    assert.strictEqual(u.gender, 'male');
+    assert.ok(/Hinglish/i.test(u.prompt), 'hinglish instruction');
+    assert.ok(/SHORT sentences/i.test(u.prompt), 'short-sentence speaking style');
+    assert.ok(/ZX4X4T/.test(u.prompt), 'referral code in knowledge');
+    assert.ok(/ProtonVPN/.test(u.prompt), 'vpn knowledge');
+    assert.ok(/Sheraz/.test(u.knowledge), 'founder knowledge names Sheraz');
+    assert.ok(/owner/i.test(u.knowledge), 'founder knowledge says owner');
+    var instr = prompt.buildAgentInstruction(u, '', '', null);
+    assert.ok(/Ustaad/.test(instr), 'instruction names Ustaad');
+    assert.ok(/save_note/.test(instr), 'memory system wired');
   },
   'getByNumber dials with varied formatting': function () {
     assert.strictEqual(agents.getByNumber('+1 (555) 010-0001').id, 'ava');

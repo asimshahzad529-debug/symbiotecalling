@@ -257,6 +257,7 @@ function createOmniSession(opts) {
     setupConfirmed: false,
     greeted: false,
     closed: false,
+    resumeNote: opts.resumeNote || null, // background resume: context note instead of greeting
     resumeHandle: null,
     resumeSupported: false,
     backoffIdx: 0,
@@ -365,6 +366,7 @@ function createOmniSession(opts) {
       if (message.setupComplete && !state.setupConfirmed) {
         state.setupConfirmed = true;
         state.backoffIdx = 0;
+        if (state.resumeNote && !state._resumed) state._resumed = true; // background resume: flag the emit below
         emit({ type: 'setup_complete', model: state.model, resumed: !!state._resumed });
         state._resumed = false;
         /* -------------------------------------------------------------
@@ -408,7 +410,8 @@ function createOmniSession(opts) {
           startMenu();
         } else if (!state.greeted) {
           state.greeted = true;
-          greetStart();
+          if (state.resumeNote) resumeWithNote(); // background resume: context note, no greeting
+          else greetStart();
         }
         return;
       }
@@ -457,6 +460,22 @@ function createOmniSession(opts) {
 
   function greetEmit(st, detail) {
     emit({ type: 'greeting_state', state: st, detail: detail || {} });
+  }
+
+  // Background resume: the caller's tab went to background (e.g. they opened
+  // the Play Store) and the client reconnected. Skip the greeting trigger
+  // entirely; feed the resume note as context so the model continues naturally.
+  function resumeWithNote() {
+    var note = state.resumeNote; state.resumeNote = null;
+    var hs = state.greetHs;
+    hs.phase = 'resumed';
+    try {
+      state.session.sendClientContent({
+        turns: [{ role: 'user', parts: [{ text: note }] }],
+        turnComplete: true
+      });
+    } catch (e) { /* transport failed; client-side retry covers it */ }
+    greetEmit('resumed', {});
   }
 
   // Start the handshake on setupComplete: send the T+0 trigger, arm the

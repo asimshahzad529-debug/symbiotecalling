@@ -53,7 +53,7 @@ function numberForKeyHash(keyHash) {
   return '+1 (' + AREA + ') ' + EXCHANGE + '-' + lineStr;
 }
 
-/** True when a number is one of the 101 built-in agent numbers (+1 (555) 010-00XX). */
+/** True when a number is one of the 102 built-in agent numbers (+1 (555) 010-00XX). */
 function isBuiltInAgentNumber(number) {
   return typeof number === 'string' && /^\+1 \(555\) 010-0\d{3}$/.test(number);
 }
