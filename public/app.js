@@ -1297,7 +1297,7 @@
   window.addEventListener('beforeunload', function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'hangup' })); });
 
   var f = document.createElement('footer'); f.className = 'note';
-  f.textContent = 'Symbiote Calling v7.5 · 102 agents + your custom agents · local demo — fictional numbers, not a real phone network.';
+  f.textContent = 'Symbiote Calling v7.5 · 103 agents + your custom agents · local demo — fictional numbers, not a real phone network.';
   document.getElementById('main').appendChild(f);
 
   /* ---------- v7 boot: key login gates everything ---------- */
